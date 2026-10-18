@@ -2154,5 +2154,10 @@
     "patches": "https://github.com/wonjoonSeol-WS/morphe-patches",
     "integrations": false,
     "disabled": false
+  },
+  "aioue-spotify-capture": {
+    "patches": "https://github.com/aioue/morphe-spotify-capture-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
