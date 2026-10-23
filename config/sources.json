@@ -2244,5 +2244,10 @@
     "patches": "https://github.com/ethan-manny/spotify-tv-crossfade",
     "integrations": false,
     "disabled": false
+  },
+  "oxbow": {
+    "patches": "https://github.com/aic0d3r/oxbow",
+    "integrations": false,
+    "disabled": false
   }
 }
