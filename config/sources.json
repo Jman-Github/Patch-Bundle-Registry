@@ -2395,6 +2395,11 @@
     "integrations": false,
     "disabled": false
   },
+  "miui-screen-recorder-fps-unlock": {
+    "patches": "https://github.com/FluffyDiscord/miui-screen-recorder-fps-unlock",
+    "integrations": false,
+    "disabled": false
+  },
   "saurabh825-morphe": {
     "patches": "https://github.com/Saurabh825/morphe-patches",
     "integrations": false,
