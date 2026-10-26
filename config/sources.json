@@ -2409,5 +2409,10 @@
     "patches": "https://github.com/kurageno8156-lgtm/tiktok-lite-patches",
     "integrations": false,
     "disabled": false
+  },
+  "miui-screen-recorder-fps-unlock": {
+    "patches": "https://github.com/FluffyDiscord/miui-screen-recorder-fps-unlock",
+    "integrations": false,
+    "disabled": false
   }
 }
