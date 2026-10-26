@@ -45,7 +45,7 @@ class PatcherRuntimeSelectionTest {
             "1.3.1" to "morphe-1-3-1", "1.5.2" to "morphe-1-5-2",
             "1.12.0" to "morphe-1-12-0", "1.14.0" to "morphe-1-14-0",
             "1.15.1" to "morphe-1-15-1",
-            "1.9.0" to "morphe-latest", "2.0.0" to "morphe-latest")
+            "1.9.0" to "morphe-latest", "2.0.0" to "morphe-latest", "2.0.1" to "morphe-latest")
         for ((declaration, first) in preferred) {
             assertEquals(listOf(first) + newestFirst.filter { it != first },
                 selectRuntimes(config, "Morphe:V1", declaration).map { it.id })

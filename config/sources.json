@@ -1,9 +1,4 @@
 {
-  "revanced": {
-    "patches": "https://github.com/ReVanced/revanced-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "piko": {
     "patches": "https://github.com/crimera/piko",
     "integrations": false,
@@ -2290,11 +2285,6 @@
     "integrations": false,
     "disabled": false
   },
-  "f1tv-4k-morphe": {
-    "patches": "https://github.com/ythemelis/f1tv-4k-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "raid-judu": {
     "patches": "https://github.com/Vakarux12/raid-judu-patches",
     "integrations": false,
@@ -2347,11 +2337,6 @@
   },
   "pancake-patches": {
     "patches": "https://github.com/Ikuradachi/pancake-patches",
-    "integrations": false,
-    "disabled": false
-  },
-  "rj-reseam": {
-    "patches": "https://github.com/rudrakshrajpurohit417-sketch/RJ-reseam-patches",
     "integrations": false,
     "disabled": false
   },
@@ -2412,6 +2397,31 @@
   },
   "miui-screen-recorder-fps-unlock": {
     "patches": "https://github.com/FluffyDiscord/miui-screen-recorder-fps-unlock",
+    "integrations": false,
+    "disabled": false
+  },
+  "saurabh825-morphe": {
+    "patches": "https://github.com/Saurabh825/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "myspoti-morphe": {
+    "patches": "https://github.com/amit-0i/myspoti-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "v1rtu0s-morphe": {
+    "patches": "https://github.com/v1rtu0s/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "maps-patches": {
+    "patches": "https://github.com/hyperstown/maps-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "fakh-patches": {
+    "patches": "https://github.com/amfakh/fakh-patches",
     "integrations": false,
     "disabled": false
   }

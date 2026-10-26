@@ -166,9 +166,9 @@
       "id": "morphe-latest",
       "family": "Morphe:V1",
       "loader": "morphe",
-      "coordinate": "app.morphe:morphe-patcher:2.0.0",
+      "coordinate": "app.morphe:morphe-patcher:2.0.1",
       "dependencies": [
-        "app.morphe:morphe-patcher:2.0.0",
+        "app.morphe:morphe-patcher:2.0.1",
         "com.google.code.gson:gson:2.14.0"
       ],
       "range": ">1.2.0",
