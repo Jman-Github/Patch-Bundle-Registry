@@ -2365,11 +2365,6 @@
     "integrations": false,
     "disabled": false
   },
-  "0xbaseless-morphe": {
-    "patches": "https://github.com/0xBaselessProjects/morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "openlauncher": {
     "patches": "https://github.com/mich-de/openlauncher",
     "integrations": false,
@@ -2377,11 +2372,6 @@
   },
   "valenced": {
     "patches": "https://github.com/Valenced/valenced",
-    "integrations": false,
-    "disabled": false
-  },
-  "gboard-extended-search": {
-    "patches": "https://github.com/markpaul099/gboard-extended-search",
     "integrations": false,
     "disabled": false
   },
@@ -2437,6 +2427,51 @@
   },
   "buienalarm-patches": {
     "patches": "https://github.com/johnneerdael/buienalarm-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-yt-dlna": {
+    "patches": "https://github.com/ca-za/morphe-yt-dlna",
+    "integrations": false,
+    "disabled": false
+  },
+  "blackmagic-camera-patches": {
+    "patches": "https://github.com/azain47/blackmagic-camera-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "trax-morphe-patches": {
+    "patches": "https://github.com/bastlam/trax_morphe_patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "pdalife-morphe-patches": {
+    "patches": "https://github.com/steeepaaaan/pdalife-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "6jarjar6-morphe": {
+    "patches": "https://github.com/6jarjar6/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "drtv-morphe-patches": {
+    "patches": "https://github.com/zenthora/drtv-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-gifs-extended": {
+    "patches": "https://github.com/markpaul099/gboard-gifs-extended",
+    "integrations": false,
+    "disabled": false
+  },
+  "xposed-newx-patches": {
+    "patches": "https://github.com/Sylonin/xposed-newx-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "rj-reseam-patches": {
+    "patches": "https://github.com/visionxstream99-mod/RJ-reseam-patches",
     "integrations": false,
     "disabled": false
   }
