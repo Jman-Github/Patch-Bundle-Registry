@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 OFFICIAL_SOURCE = "https://git.reseam.app/reseam/patches"
 GIT_RELEASES_URL = "https://git.reseam.app/api/v1/repos/reseam/patches/releases"
-HISTORY_URL = "https://api.reseam.app/v1/patches/history/prerelease"
+HISTORY_URL = "https://api.reseam.app/patches.json"
 
 
 def release_inventory(document):
