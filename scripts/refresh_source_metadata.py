@@ -12,6 +12,16 @@ import httpx
 from generate_database import ROOT, encoded, normalize_source, read_json
 from git_hosts import auth_headers, endpoint, hosts
 
+try:
+    from scripts.revanced_api import OFFICIAL_SOURCE as REVANCED_OFFICIAL_SOURCE
+except ModuleNotFoundError:
+    try:
+        from revanced_api import OFFICIAL_SOURCE as REVANCED_OFFICIAL_SOURCE
+    except ModuleNotFoundError:
+        REVANCED_OFFICIAL_SOURCE = "https://github.com/ReVanced/revanced-patches"
+
+REVANCED_METADATA_REPO = "https://gitlab.com/ReVanced/revanced-patches"
+
 
 def metadata_for(url, payload):
     namespace, repo = urlparse(url).path.strip("/").rsplit("/", 1)
@@ -178,8 +188,13 @@ def refresh(root, client, limit=None, now=None, workers=None):
         cached = result[url.lower()]
         updated = {**cached, "checked_at": now.isoformat(),
                    "source_metadatum": dict(cached.get("source_metadatum", {}))}
-        api = endpoint(url, releases=False)
-        headers = auth_headers(url)
+        target_url = (
+            REVANCED_METADATA_REPO
+            if url.lower() == REVANCED_OFFICIAL_SOURCE.lower()
+            else url
+        )
+        api = endpoint(target_url, releases=False)
+        headers = auth_headers(target_url)
         if cached.get("etag") and (url.lower() not in morphe or cached.get("default_branch")):
             headers["If-None-Match"] = cached["etag"]
         response = None
@@ -190,7 +205,7 @@ def refresh(root, client, limit=None, now=None, workers=None):
                 payload = response.json()
                 if not isinstance(payload, dict):
                     raise ValueError("Expected repository metadata")
-                updated["source_metadatum"].update(metadata_for(url, payload))
+                updated["source_metadatum"].update(metadata_for(target_url, payload))
                 updated["default_branch"] = payload.get("default_branch")
                 updated["etag"] = response.headers.get("etag")
             elif response.status_code != 304:

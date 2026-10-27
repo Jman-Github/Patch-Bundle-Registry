@@ -390,14 +390,22 @@ export class D1Catalog extends Catalog {
     let filter = this.visible("r") + " AND " +
       this.where("patch",this.publicFilter("patch",{}),"r",bindings);
     filter += " AND " + col("r","hidden") + " IS NOT 1 AND " + col("r","loader_excluded") + " IS NOT 1";
-    const many = (field, values) => {
-      bindings.push(JSON.stringify(values));
-      filter += " AND " + col("r",field) + " IN (SELECT value FROM json_each(?))";
+    const same = (field, value) => {
+      bindings.push(value);
+      filter += " AND " + col("r",field) + "=?";
     };
-    if (args.bundle_id) many("bundle_id",[args.bundle_id]);
-    if (args.bundle_ids) many("bundle_id",args.bundle_ids);
-    if (args.patch_id != null) many("id",[args.patch_id]);
-    if (args.patch_ids) many("id",args.patch_ids);
+    const many = (field, values) => {
+      if (values.length === 1) {
+        same(field, values[0]);
+      } else {
+        bindings.push(JSON.stringify(values));
+        filter += " AND " + col("r",field) + " IN (SELECT value FROM json_each(?))";
+      }
+    };
+    if (args.bundle_id) same("bundle_id", args.bundle_id);
+    if (args.bundle_ids) many("bundle_id", args.bundle_ids);
+    if (args.patch_id != null) same("id", args.patch_id);
+    if (args.patch_ids) many("id", args.patch_ids);
     if (!args.include_unverified) filter += " AND " + col("r","metadata_status") + "='verified'";
     if (args.package) {
       bindings.push(args.package);
@@ -414,6 +422,10 @@ export class D1Catalog extends Catalog {
       .bind(...bindings,maximum+1,offset).all()).results.map(item=>JSON.parse(item.data));
     if (args.all && rows.length > maximum)
       throw new CatalogError("Query exceeds catalog budget; narrow the source or package filter",422);
+    if (args.compact) {
+      const data = rows.slice(0,maximum).map(row=>({...row,id:row.catalog_id,legacy_id:row.id}));
+      return {rows:data,next_cursor:rows.length>maximum?offset+maximum:null,candidate_pages:1};
+    }
     const sources = new Map();
     const bundles = args.bundle_rows ? new Map(args.bundle_rows.map(row=>[row.id,row])) : new Map();
     for (const row of rows.slice(0,maximum)) if (!bundles.has(row.bundle_id)) {

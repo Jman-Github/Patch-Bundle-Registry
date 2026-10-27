@@ -287,9 +287,10 @@ async function rest(catalog, url, env = {}) {
     if (!params.has("bundle_id")) throw new CatalogError("bundle_id is required");
     const {limit} = pagination({limit:params.get("limit") ?? 100});
     const offset = Number(params.get("page_cursor") ?? 0);
+    const compact = params.get("compact") === "true";
     const page = await catalog.patchRows({bundle_id:params.get("bundle_id"),package:params.get("package"),
-      include_unverified:params.get("include_unverified")==="true",page_cursor:offset,limit});
-    if (params.get("compact") === "true")
+      include_unverified:params.get("include_unverified")==="true",page_cursor:offset,limit,compact});
+    if (compact)
       page.rows = page.rows.map(({bundle,patch_packages,...patch})=>patch);
     // Keep complete patch records, but shorten pages to fit the response budget.
     // Preserve the offset of the first omitted row so no patches are skipped.

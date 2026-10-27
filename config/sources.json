@@ -1,4 +1,9 @@
 {
+  "revanced": {
+    "patches": "https://github.com/ReVanced/revanced-patches",
+    "integrations": false,
+    "disabled": false
+  },
   "piko": {
     "patches": "https://github.com/crimera/piko",
     "integrations": false,
@@ -2422,6 +2427,16 @@
   },
   "fakh-patches": {
     "patches": "https://github.com/amfakh/fakh-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "theol-git-morphe": {
+    "patches": "https://github.com/theol-git/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "buienalarm-patches": {
+    "patches": "https://github.com/johnneerdael/buienalarm-patches",
     "integrations": false,
     "disabled": false
   }

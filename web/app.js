@@ -441,6 +441,7 @@ async function loadBundles(refreshedCatalog = null) {
         currentLatestIds = latestReleaseIds(summaries);
         renderStats();
         renderCache.clear();
+        bundlePatches.cache?.clear();
         latestBundles = summaries.filter(bundle => bundle.is_latest).map(transformBundle)
             .sort((a, b) => (b.repoStars ?? -1) - (a.repoStars ?? -1) ||
                 a.sourceUrl.localeCompare(b.sourceUrl));
@@ -556,7 +557,11 @@ function transformPatch(patch) {
 }
 
 async function bundlePatches(bundle) {
-    if (!bundle.loadedPatches) {
+    const cache = bundlePatches.cache = bundlePatches.cache || new Map();
+    const key = `${bundle.id}:${bundle.appPackage || ""}`;
+    if (bundle.loadedPatches) return bundle.loadedPatches;
+    if (cache.has(key)) return cache.get(key);
+    const loadPromise = (async () => {
         const load = () => catalog.patchRows({ bundle_id: bundle.id, package: bundle.appPackage,
             all: true, include_unverified: true, compact: true });
         let result;
@@ -565,9 +570,17 @@ async function bundlePatches(bundle) {
             if (!await recoverGeneration(error, true)) throw error;
             result = await load();
         }
-        bundle.loadedPatches = result.rows.filter(patch => !patch.hidden && !patch.loader_excluded).map(transformPatch);
+        return result.rows.filter(patch => !patch.hidden && !patch.loader_excluded).map(transformPatch);
+    })();
+    cache.set(key, loadPromise);
+    try {
+        const patches = await loadPromise;
+        bundle.loadedPatches = patches;
+        return patches;
+    } catch (error) {
+        cache.delete(key);
+        throw error;
     }
-    return bundle.loadedPatches;
 }
 
 async function bundleChangelog(bundle) {

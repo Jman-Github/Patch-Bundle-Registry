@@ -298,3 +298,29 @@ def test_old_etag_cache_backfills_branch_and_ignores_html_icon(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = metadata.refresh(tmp_path, client, now=now)
     assert not result[url]["source_metadatum"].get("bundle_icon_url")
+
+
+def test_revanced_official_source_routes_to_gitlab_metadata(tmp_path):
+    url = "https://github.com/ReVanced/revanced-patches"
+    inventory(tmp_path, [url])
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert str(request.url) == "https://gitlab.com/api/v4/projects/ReVanced%2Frevanced-patches"
+        return httpx.Response(200, json={
+            "namespace": {"full_path": "ReVanced", "avatar_url": None},
+            "path": "revanced-patches",
+            "description": "Official ReVanced patches",
+            "star_count": 136,
+            "default_branch": "main",
+        })
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = metadata.refresh(tmp_path, client)
+    assert len(requests) == 1
+    canonical = url.lower()
+    assert result[canonical]["http_status"] == 200
+    assert result[canonical]["source_metadatum"]["owner_name"] == "ReVanced"
+    assert result[canonical]["source_metadatum"]["repo_name"] == "revanced-patches"
+    assert result[canonical]["source_metadatum"]["repo_stars"] == 136
