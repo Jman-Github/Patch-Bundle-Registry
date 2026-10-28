@@ -217,6 +217,44 @@
       "fallback": true
     },
     {
+      "id": "reseam-v0-34-1",
+      "family": "Reseam",
+      "loader": "reseam",
+      "coordinate": "app.reseam:reseam:0.34.1",
+      "dependencies": [],
+      "range": "*",
+      "fallback": true,
+      "executables": {
+        "windows-x64": {
+          "url": "https://cdn.reseam.app/engine/v0.34.1/reseam-windows-x64.exe",
+          "sha256": "d232738c61c22c88e69ea8c50a33563798d434a771eb94410a43c3a6fb9e22ec"
+        },
+        "linux-x64": {
+          "url": "https://cdn.reseam.app/engine/v0.34.1/reseam-linux-x64",
+          "sha256": "536f2a5ad5838ac8ef429f6e1b337d1405021e4215884d2acaee18fc6a43ad44"
+        }
+      }
+    },
+    {
+      "id": "reseam-v0-34-0",
+      "family": "Reseam",
+      "loader": "reseam",
+      "coordinate": "app.reseam:reseam:0.34.0",
+      "dependencies": [],
+      "range": "*",
+      "fallback": true,
+      "executables": {
+        "windows-x64": {
+          "url": "https://cdn.reseam.app/engine/v0.34.0/reseam-windows-x64.exe",
+          "sha256": "6ddec746ae34c3e026938fb7dfbfd723567275c944468a7ba44ceb94ba1a3b8f"
+        },
+        "linux-x64": {
+          "url": "https://cdn.reseam.app/engine/v0.34.0/reseam-linux-x64",
+          "sha256": "df73d79beda464976a094c25165b9befaa1f8a5ce9288b0b613429ba1afb436f"
+        }
+      }
+    },
+    {
       "id": "reseam-v0-33-0",
       "family": "Reseam",
       "loader": "reseam",
