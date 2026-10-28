@@ -1690,11 +1690,6 @@
     "integrations": false,
     "disabled": false
   },
-  "lawnchair": {
-    "patches": "https://github.com/latanvillegas/lawnchair-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "bakwudo-uyu": {
     "patches": "https://github.com/bakwudo/uyu",
     "integrations": false,
@@ -2441,7 +2436,7 @@
     "disabled": false
   },
   "trax-morphe-patches": {
-    "patches": "https://github.com/bastlam/trax_morphe_patches",
+    "patches": "https://github.com/bastlam/trax_patches",
     "integrations": false,
     "disabled": false
   },
@@ -2472,6 +2467,56 @@
   },
   "rj-reseam-patches": {
     "patches": "https://github.com/visionxstream99-mod/RJ-reseam-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "overhypedcat-twitch-patches": {
+    "patches": "https://github.com/Overhypedcat/overhypedcat-twitch-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "bitchord-morphe-patches": {
+    "patches": "https://github.com/Hexclyde/bitchord-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "hyzor-morphe-patches": {
+    "patches": "https://github.com/hyzor/hyzor-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-instaprime": {
+    "patches": "https://github.com/drappula/morphe-patches-instaprime",
+    "integrations": false,
+    "disabled": false
+  },
+  "piko-gif-patch": {
+    "patches": "https://github.com/Piel-M/piko-gif-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "client-revanced-patches": {
+    "patches": "https://github.com/immensaccessum/client-revanced-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "zeekr-adapt-morphe-patches": {
+    "patches": "https://github.com/mormislaw/zeekr-adapt-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "yahoo-transit-morphe-patch": {
+    "patches": "https://github.com/paruo/yahoo-transit-morphe-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "instagram-custom-branding-patches": {
+    "patches": "https://github.com/yashsehrawatdelete550-dotg/instagram-custom-branding-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "alexandrel-morphe": {
+    "patches": "https://github.com/alexandreL/morphe-patches",
     "integrations": false,
     "disabled": false
   }
