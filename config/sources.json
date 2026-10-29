@@ -2370,11 +2370,6 @@
     "integrations": false,
     "disabled": false
   },
-  "vk-im": {
-    "patches": "https://github.com/oviron/VK-IM",
-    "integrations": false,
-    "disabled": false
-  },
   "xposed-patches": {
     "patches": "https://github.com/AetherMagee/xposed-patches",
     "integrations": false,
@@ -2517,6 +2512,61 @@
   },
   "alexandrel-morphe": {
     "patches": "https://github.com/alexandreL/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "maayan-discord-patches": {
+    "patches": "https://github.com/maayan080/maayan-discord-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "badfella-patches": {
+    "patches": "https://github.com/XBadFellaX/BadFella-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "karma-patches": {
+    "patches": "https://github.com/MrRaita/Karma-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "vk-messenger-morphe": {
+    "patches": "https://github.com/PerfLite/morphe-patches-vk-messenger",
+    "integrations": false,
+    "disabled": false
+  },
+  "vk-video-morphe": {
+    "patches": "https://github.com/PerfLite/morphe-patches-vk-video",
+    "integrations": false,
+    "disabled": false
+  },
+  "nuvio-morphe-mayank": {
+    "patches": "https://github.com/mayanksh3khar/nuvio-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "vk-im-hexberk": {
+    "patches": "https://github.com/hexberk/VK-IM",
+    "integrations": false,
+    "disabled": false
+  },
+  "machu-morphe-patches": {
+    "patches": "https://github.com/MatthewRiley05/Machu-Morphe-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ebpatcher-patches": {
+    "patches": "https://github.com/emotionbug/EBPatcher-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "smartlife-patches": {
+    "patches": "https://github.com/Fuku856/smartlife-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "stars-morphe-patch": {
+    "patches": "https://github.com/Starkist124/stars-morphe-patch",
     "integrations": false,
     "disabled": false
   }
