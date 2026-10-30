@@ -2569,5 +2569,10 @@
     "patches": "https://github.com/Starkist124/stars-morphe-patch",
     "integrations": false,
     "disabled": false
+  },
+  "fairemail-patches": {
+    "patches": "https://github.com/rikunode/fairemail-morphe-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
