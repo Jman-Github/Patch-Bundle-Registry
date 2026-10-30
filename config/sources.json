@@ -1510,11 +1510,6 @@
     "integrations": false,
     "disabled": false
   },
-  "virzak": {
-    "patches": "https://github.com/virzak/morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "jagas": {
     "patches": "https://github.com/Jagannath70086/jagas-morphe-patches",
     "integrations": false,
@@ -2500,11 +2495,6 @@
     "integrations": false,
     "disabled": false
   },
-  "yahoo-transit-morphe-patch": {
-    "patches": "https://github.com/paruo/yahoo-transit-morphe-patch",
-    "integrations": false,
-    "disabled": false
-  },
   "instagram-custom-branding-patches": {
     "patches": "https://github.com/yashsehrawatdelete550-dotg/instagram-custom-branding-patches",
     "integrations": false,
@@ -2572,6 +2562,56 @@
   },
   "fairemail-patches": {
     "patches": "https://github.com/rikunode/fairemail-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "lorizisback-morphe": {
+    "patches": "https://github.com/lorizisback/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-rif-fixes": {
+    "patches": "https://github.com/notBrian2/revanced-rif-fixes",
+    "integrations": false,
+    "disabled": false
+  },
+  "sync-up": {
+    "patches": "https://github.com/RashKash103/sync-up",
+    "integrations": false,
+    "disabled": false
+  },
+  "sync-reddit-fixes": {
+    "patches": "https://github.com/trulow/sync-reddit-fixes",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-sync-fixes": {
+    "patches": "https://github.com/Krokette/revanced-sync-fixes",
+    "integrations": false,
+    "disabled": false
+  },
+  "southstar21-patches": {
+    "patches": "https://github.com/southstar21dev/southstar21-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "custom-morphe-nelsonator": {
+    "patches": "https://github.com/the-nelsonator/custom-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "es-file-explorer-morphe": {
+    "patches": "https://github.com/azkiabenington/es-file-explorer-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "notes-morphe": {
+    "patches": "https://github.com/jibon-k/notes-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-enc-patches": {
+    "patches": "https://github.com/encarnian/gboard-enc-patches",
     "integrations": false,
     "disabled": false
   }
