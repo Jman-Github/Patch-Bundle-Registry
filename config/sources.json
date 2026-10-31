@@ -2505,11 +2505,6 @@
     "integrations": false,
     "disabled": false
   },
-  "maayan-discord-patches": {
-    "patches": "https://github.com/maayan080/maayan-discord-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "badfella-patches": {
     "patches": "https://github.com/XBadFellaX/BadFella-Patches",
     "integrations": false,
@@ -2612,6 +2607,26 @@
   },
   "gboard-enc-patches": {
     "patches": "https://github.com/encarnian/gboard-enc-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "songsterr-patches": {
+    "patches": "https://gitlab.com/georgewoodall82/songsterr-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-offline-morphe-test": {
+    "patches": "https://github.com/Kirkland-Pickles/Gboard-offline-morphe-test",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-redditsync": {
+    "patches": "https://github.com/TheLastWallaby/revanced-redditsync",
+    "integrations": false,
+    "disabled": false
+  },
+  "gcamvboost": {
+    "patches": "https://github.com/Kekimurus/GCamVBoost",
     "integrations": false,
     "disabled": false
   }
