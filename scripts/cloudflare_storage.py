@@ -175,9 +175,28 @@ class BlobCache:
         digest = hashlib.sha256(body).hexdigest()
         with self.locks[int(digest[:2], 16) % len(self.locks)]:
             if digest not in known:
-                self.put("objects/" + digest, body)
-                self.add("object_uploads")
-                self.add("upload_bytes", len(body))
+                # A cached object may be an upload from an interrupted publication,
+                # or belong to another retained snapshot. The cache is only a hint:
+                # verify remote bytes before replacing a billed PUT with a GET.
+                remote = None
+                key = "objects/" + digest
+                if self.path(digest).is_file():
+                    try:
+                        remote = self.get(key)
+                    except Exception:
+                        # This is an optional optimization, not a prerequisite for
+                        # writing. Missing objects, corrupt compressed checkpoints,
+                        # and failed probes all retain the normal upload path.
+                        remote = None
+                    else:
+                        self.add("object_downloads")
+                        self.add("download_bytes", len(remote))
+                if remote == body:
+                    self.add("uploads_avoided")
+                else:
+                    self.put(key, body)
+                    self.add("object_uploads")
+                    self.add("upload_bytes", len(body))
                 with self.guard:
                     known.add(digest)
             else:

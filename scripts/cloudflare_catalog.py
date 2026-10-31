@@ -677,8 +677,24 @@ class Cloud:
                     "next"
                 ]
             )
-            pending = self.sql("SELECT seq FROM catalog_generations WHERE status='staging'")
+            pending = self.sql(
+                "SELECT seq,generation FROM catalog_generations WHERE status='staging'"
+            )
+            # A retry of the same immutable generation can keep completed D1 batches.
+            # Never reuse a sequence behind a ready generation (including after rollback).
+            resume = next(
+                (
+                    row for row in pending
+                    if row["generation"] == generation
+                    and (not tips or row["seq"] > tips[0]["seq"])
+                ),
+                None,
+            )
+            if resume:
+                seq = resume["seq"]
             for row in pending:
+                if resume and row["seq"] == seq:
+                    continue
                 abandoned = row["seq"]
                 self.cleanup_records("DELETE FROM catalog_records WHERE from_seq=?", [abandoned])
                 self.cleanup_records(
@@ -743,7 +759,7 @@ class Cloud:
                 digest = record_hash(row)
                 if prior.get((kind, key)) == digest:
                     continue
-                body = self.storage_row(kind, row)
+                body = self.storage_row(kind, row, known)
                 if len(body.encode()) > 1_900_000:
                     raise ValueError("Record exceeds D1 row budget; publication refused")
                 pending_rows.append((kind, key, seq, body, digest))
@@ -756,7 +772,10 @@ class Cloud:
                     metadata_only[kind] += 1
         # JSON input uses one binding; each inserted row still runs the version-closing trigger.
         with self.phase("insert_d1_records"):
-            self.insert_rows(pending_rows)
+            if resume:
+                self.insert_rows(pending_rows, repair=True)
+            else:
+                self.insert_rows(pending_rows)
         self.publication_metrics.update(
             {
                 "changed_records_by_kind": dict(changed_kinds),
@@ -766,13 +785,28 @@ class Cloud:
         print(json.dumps(self.publication_metrics), flush=True)
         with self.phase("expire_and_count_d1_records"):
             self.expire_rows(seq, sorted(prior.keys() - records.keys()))
-            count = self.sql(
-                "SELECT COUNT(*) AS n FROM catalog_records WHERE from_seq<=?"
-                " AND (to_seq IS NULL OR to_seq>?)",
-                [seq, seq],
-            )[0]["n"]
-            if count != len(records):
-                raise ValueError("D1 staged row count mismatch")
+            count_sql = (
+                "SELECT COUNT(*) AS n,COALESCE(SUM(from_seq=?),0) AS staged"
+                " FROM catalog_records WHERE from_seq<=?"
+                " AND (to_seq IS NULL OR to_seq>?)"
+            )
+            counts = self.sql(count_sql, [seq, seq, seq])[0]
+            if counts["n"] != len(records) or counts["staged"] != len(pending_rows):
+                if not resume:
+                    raise ValueError("D1 staged row count mismatch")
+                # Conditional upserts already compare every intended staged body
+                # and hash. Extra rows or damaged visibility boundaries require
+                # the original discard-and-replay recovery path.
+                self.cleanup_records("DELETE FROM catalog_records WHERE from_seq=?", [seq])
+                self.cleanup_records(
+                    "UPDATE catalog_records SET to_seq=NULL WHERE to_seq=?", [seq]
+                )
+                self.insert_rows(pending_rows)
+                self.expire_rows(seq, sorted(prior.keys() - records.keys()))
+                counts = self.sql(count_sql, [seq, seq, seq])[0]
+                if counts["n"] != len(records) or counts["staged"] != len(pending_rows):
+                    raise ValueError("D1 staged row count mismatch")
+            count = counts["n"]
         # Ready generations were verified before activation. Re-read only new blobs here;
         # the explicit verify/recovery operations still check every retained object.
         with self.phase("verify_new_objects"):
@@ -956,14 +990,14 @@ class Cloud:
         if actual != expected:
             raise ValueError("D1 generation does not match verified R2 records")
 
-    def storage_row(self, kind, row):
+    def storage_row(self, kind, row, known=None):
         body = encode(row)
         if len(body) <= 1_500_000:
             return body.decode()
         if kind != "history_release":
             raise ValueError("Record exceeds D1 row budget; publication refused")
         digest = hashlib.sha256(body).hexdigest()
-        self.blob(body, set())
+        self.blob(body, known if known is not None else set())
         compact = {
             key: value
             for key, value in row.items()
@@ -978,6 +1012,13 @@ class Cloud:
             raise ValueError("Database rebuild requires --confirm REBUILD")
         self.verify_document(document)
         records = self.read_records(document)
+        # verify_document has just checked these originals remotely, including
+        # legacy manifests without a record_objects index. Rebuild only D1 rows.
+        known = {
+            hashlib.sha256(encode(row["data"])).hexdigest()
+            for row in records
+            if row["kind"] == "history_release" and len(encode(row["data"])) > 1_500_000
+        }
         # Explicit disaster recovery only. Verified R2 data is loaded before D1 is cleared.
         self.sql("UPDATE catalog_state SET active_seq=NULL WHERE id=1")
         self.sql("DELETE FROM catalog_records")
@@ -996,7 +1037,7 @@ class Cloud:
                     row["kind"],
                     row["key"],
                     1,
-                    self.storage_row(row["kind"], row["data"]),
+                    self.storage_row(row["kind"], row["data"], known),
                     record_hash(row["data"]),
                 )
             )
@@ -1011,7 +1052,18 @@ class Cloud:
         self.sql("UPDATE catalog_state SET active_seq=1 WHERE id=1")
         print("Rebuilt verified generation " + manifest["generation"])
 
-    def insert_rows(self, rows):
+    def insert_rows(self, rows, *, repair=False):
+        conflict = " ON CONFLICT(kind,record_key,from_seq) DO NOTHING"
+        if repair:
+            # Only a matching staging generation may repair existing row bodies.
+            # Identical rows stay untouched, including all their index entries.
+            conflict = (
+                " ON CONFLICT(kind,record_key,from_seq) DO UPDATE SET"
+                " data=excluded.data,content_hash=excluded.content_hash,to_seq=NULL"
+                " WHERE catalog_records.to_seq IS NOT NULL"
+                " OR catalog_records.data<>excluded.data"
+                " OR catalog_records.content_hash<>excluded.content_hash"
+            )
         with Progress("insert_rows", len(rows)) as progress:
             batch, size = [], 2
             completed = 0
@@ -1025,7 +1077,7 @@ class Cloud:
                     "SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),"
                     "json_extract(value,'$[2]'),json_extract(value,'$[3]'),"
                     "json_extract(value,'$[4]') "
-                    "FROM json_each(?) WHERE 1 ON CONFLICT(kind,record_key,from_seq) DO NOTHING",
+                    "FROM json_each(?) WHERE 1" + conflict,
                     [encode(batch).decode()],
                 )
                 self.transfers().add("d1_insert_batches")
@@ -1040,7 +1092,7 @@ class Cloud:
                 if length > 512_000:
                     self.sql(
                         "INSERT INTO catalog_records(kind,record_key,from_seq,data,content_hash) "
-                        "VALUES(?,?,?,?,?) ON CONFLICT(kind,record_key,from_seq) DO NOTHING",
+                        "VALUES(?,?,?,?,?)" + conflict,
                         row,
                     )
                     self.transfers().add("d1_insert_batches")

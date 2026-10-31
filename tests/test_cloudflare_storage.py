@@ -71,6 +71,7 @@ def test_transfer_concurrency_is_bounded_and_uploads_are_unique(tmp_path):
     cache.prefetch(list(objects) * 3)
     assert 1 < peak <= 4
     assert cache.metrics["object_downloads"] == len(objects)
+    cache = BlobCache(tmp_path / "uploads", get, lambda key, body: uploads.append(key), workers=4)
     known = set()
     cache.parallel(lambda _: cache.upload(bodies[0], known), range(30))
     assert len(uploads) == 1
@@ -385,3 +386,71 @@ def test_fast_restore_accepts_older_compact_archives(tmp_path, monkeypatch, omit
         payload = (fresh / prefix / name).read_bytes()
         assert hashlib.sha256(payload).hexdigest() == document["files"][name]
     assert memory.transfers().metrics["object_downloads"] == 2 + len(omitted)
+
+
+@pytest.mark.parametrize("remote_state", ["present", "missing", "corrupt"])
+def test_cached_upload_hint_checks_remote_bytes_before_skipping_put(tmp_path, remote_state):
+    body = b"immutable object"
+    digest = hashlib.sha256(body).hexdigest()
+    key = "objects/" + digest
+    objects = {} if remote_state == "missing" else {
+        key: body if remote_state == "present" else b"corrupt"
+    }
+    reads, writes = [], []
+
+    def get(name):
+        reads.append(name)
+        return objects[name]
+
+    def put(name, content):
+        writes.append(name)
+        objects[name] = content
+
+    cache = BlobCache(tmp_path, get, put)
+    # Even a corrupt local hint cannot establish that remote content exists.
+    cache.remember(digest, b"untrusted local hint")
+    known = set()
+    cache.parallel(lambda _: cache.upload(body, known), range(12))
+    assert reads == [key]
+    assert writes == ([] if remote_state == "present" else [key])
+    assert objects[key] == body
+    assert cache.read(digest) == body
+    assert known == {digest}
+
+
+def test_new_upload_does_not_probe_r2_without_a_cached_hint(tmp_path):
+    writes = []
+    cache = BlobCache(
+        tmp_path,
+        lambda key: pytest.fail("New content should go straight to PUT"),
+        lambda key, body: writes.append(body),
+    )
+    cache.upload(b"new content", set())
+    assert writes == [b"new content"]
+
+
+@pytest.mark.parametrize("write_fails", [False, True])
+def test_failed_remote_probe_falls_back_to_upload(tmp_path, write_fails):
+    body = b"immutable"
+    digest = hashlib.sha256(body).hexdigest()
+    known = set()
+    calls = []
+
+    def get(key):
+        raise RuntimeError("R2 unavailable")
+
+    def put(key, content):
+        calls.append(content)
+        if write_fails:
+            raise RuntimeError("R2 write unavailable")
+
+    cache = BlobCache(tmp_path, get, put)
+    cache.remember(digest, body)
+    if write_fails:
+        with pytest.raises(RuntimeError, match="R2 write unavailable"):
+            cache.upload(body, known)
+        assert known == set()
+    else:
+        cache.upload(body, known)
+        assert known == {digest}
+    assert calls == [body]

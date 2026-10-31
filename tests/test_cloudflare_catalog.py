@@ -211,8 +211,16 @@ def test_oversized_originals_verify_and_rebuild_from_r2(tmp_path, monkeypatch):
     memory.verify_database(memory.active()["seq"], document)
     with pytest.raises(ValueError, match="REBUILD"):
         memory.rebuild(document, None)
+    uploads = memory.transfers().metrics["object_uploads"]
     memory.rebuild(document, "REBUILD")
+    assert memory.transfers().metrics["object_uploads"] == uploads
     memory.verify_database(1, document)
+    # Older backups lack the external-object index, but verification still
+    # proves their originals exist before rebuilding.
+    legacy = {key: value for key, value in document.items() if key != "record_objects"}
+    memory.rebuild(legacy, "REBUILD")
+    assert memory.transfers().metrics["object_uploads"] == uploads
+    memory.verify_database(1, legacy)
     memory.objects["objects/" + row["document_key"]] = b"corrupt"
     with pytest.raises(ValueError, match="integrity"):
         memory.verify_document(document)
