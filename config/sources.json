@@ -2410,11 +2410,6 @@
     "integrations": false,
     "disabled": false
   },
-  "buienalarm-patches": {
-    "patches": "https://github.com/johnneerdael/buienalarm-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "morphe-yt-dlna": {
     "patches": "https://github.com/ca-za/morphe-yt-dlna",
     "integrations": false,
@@ -2615,11 +2610,6 @@
     "integrations": false,
     "disabled": false
   },
-  "gboard-offline-morphe-test": {
-    "patches": "https://github.com/Kirkland-Pickles/Gboard-offline-morphe-test",
-    "integrations": false,
-    "disabled": false
-  },
   "revanced-redditsync": {
     "patches": "https://github.com/TheLastWallaby/revanced-redditsync",
     "integrations": false,
@@ -2627,6 +2617,121 @@
   },
   "gcamvboost": {
     "patches": "https://github.com/Kekimurus/GCamVBoost",
+    "integrations": false,
+    "disabled": false
+  },
+  "quwis-patches": {
+    "patches": "https://github.com/quwi26/Quwis-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sarvo-patches": {
+    "patches": "https://github.com/sarvottam99/SARVO-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-offline-morphe": {
+    "patches": "https://github.com/Kirkland-Pickles/Gboard-offline-morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "tracket-patches": {
+    "patches": "https://github.com/contactjayclatty/tracket-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-patches": {
+    "patches": "https://github.com/junksidetm/Gboard-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "blackbirdtools": {
+    "patches": "https://github.com/BillyCool/BlackBirdTools",
+    "integrations": false,
+    "disabled": false
+  },
+  "mobile-morphe-patches": {
+    "patches": "https://github.com/semicoloncolonel/mobile-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "cordly": {
+    "patches": "https://github.com/lildanlid1/Cordly",
+    "integrations": false,
+    "disabled": false
+  },
+  "brave-waffle": {
+    "patches": "https://github.com/RjBiermann/brave-waffle",
+    "integrations": false,
+    "disabled": false
+  },
+  "mpvex-patches": {
+    "patches": "https://github.com/kyurem39/mpvEx-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-patches-jp": {
+    "patches": "https://github.com/c-ardinal/Gboard-patches-jp",
+    "integrations": false,
+    "disabled": false
+  },
+  "honista-patches": {
+    "patches": "https://github.com/Manishrdy/honista-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "aniskip-stremio": {
+    "patches": "https://github.com/azksama/aniskip-stremio",
+    "integrations": false,
+    "disabled": false
+  },
+  "prathxm-patches": {
+    "patches": "https://github.com/VenusIsJaded/Prathxm-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "blarblarjosh-sync-fixes": {
+    "patches": "https://github.com/blarblarjosh/revanced-sync-fixes",
+    "integrations": false,
+    "disabled": false
+  },
+  "karaokenow-revanced": {
+    "patches": "https://github.com/lukatdamoves/KaraokeNow-revanced",
+    "integrations": false,
+    "disabled": false
+  },
+  "czyeru": {
+    "patches": "https://github.com/LuckyToShine/czyeru",
+    "integrations": false,
+    "disabled": false
+  },
+  "mlkem-morphe": {
+    "patches": "https://github.com/Mlkem/Morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "rex-ig-lite": {
+    "patches": "https://github.com/xboyrex/rex-ig-lite",
+    "integrations": false,
+    "disabled": false
+  },
+  "spicetify-sandbox": {
+    "patches": "https://github.com/VexingVertigo/spicetify-sandbox",
+    "integrations": false,
+    "disabled": false
+  },
+  "yahoo-transit-patches": {
+    "patches": "https://github.com/MohuttTT/yahoo-transit-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "facebook-marketplace-patches": {
+    "patches": "https://github.com/MegaTheLEGEND/Facebook-Marketplace",
+    "integrations": false,
+    "disabled": false
+  },
+  "google-maps-automotive-patches": {
+    "patches": "https://github.com/fangkampanat/google-maps-automotive-patches",
     "integrations": false,
     "disabled": false
   }
