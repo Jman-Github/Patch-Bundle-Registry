@@ -2210,11 +2210,6 @@
     "integrations": false,
     "disabled": false
   },
-  "dreaming-codes-morphe": {
-    "patches": "https://github.com/Dreaming-Codes/morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "swiftkey-mods": {
     "patches": "https://github.com/gusruben/swiftkey-mods",
     "integrations": false,
@@ -2417,11 +2412,6 @@
   },
   "blackmagic-camera-patches": {
     "patches": "https://github.com/azain47/blackmagic-camera-patches",
-    "integrations": false,
-    "disabled": false
-  },
-  "trax-morphe-patches": {
-    "patches": "https://github.com/bastlam/trax_patches",
     "integrations": false,
     "disabled": false
   },
@@ -2732,6 +2722,41 @@
   },
   "google-maps-automotive-patches": {
     "patches": "https://github.com/fangkampanat/google-maps-automotive-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "hushpine": {
+    "patches": "https://github.com/SysAdminDoc/HushPine",
+    "integrations": false,
+    "disabled": false
+  },
+  "mmenzyns": {
+    "patches": "https://github.com/mmenzyns/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sync-patch": {
+    "patches": "https://github.com/sloewhite/sync-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "bstamper4-sync-fixes": {
+    "patches": "https://github.com/bstamper4/revanced-sync-fixes",
+    "integrations": false,
+    "disabled": false
+  },
+  "nich87-patches": {
+    "patches": "https://github.com/Nich87/nich87-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "musicout-revanced": {
+    "patches": "https://github.com/musicout-app/musicout-revanced",
+    "integrations": false,
+    "disabled": false
+  },
+  "yt-music-morphe-pitch-patch": {
+    "patches": "https://github.com/AnTo88-svg/YT-Music-Morphe-Pitch-Patch",
     "integrations": false,
     "disabled": false
   }
