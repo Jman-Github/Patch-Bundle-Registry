@@ -163,12 +163,36 @@
       "fallback": true
     },
     {
-      "id": "morphe-latest",
+      "id": "morphe-2-0-1",
+      "family": "Morphe:V1",
+      "loader": "morphe",
+      "coordinate": "app.morphe:morphe-patcher:2.0.1",
+      "dependencies": [
+        "app.morphe:morphe-patcher:2.0.1",
+        "com.google.code.gson:gson:2.14.0"
+      ],
+      "range": null,
+      "fallback": true
+    },
+    {
+      "id": "morphe-2-1-0",
       "family": "Morphe:V1",
       "loader": "morphe",
       "coordinate": "app.morphe:morphe-patcher:2.1.0",
       "dependencies": [
         "app.morphe:morphe-patcher:2.1.0",
+        "com.google.code.gson:gson:2.14.0"
+      ],
+      "range": null,
+      "fallback": true
+    },
+    {
+      "id": "morphe-latest",
+      "family": "Morphe:V1",
+      "loader": "morphe",
+      "coordinate": "app.morphe:morphe-patcher:2.2.0",
+      "dependencies": [
+        "app.morphe:morphe-patcher:2.2.0",
         "com.google.code.gson:gson:2.14.0"
       ],
       "range": ">1.2.0",
@@ -215,6 +239,25 @@
       "dependencies": [],
       "range": "*",
       "fallback": true
+    },
+    {
+      "id": "reseam-v0-38-0",
+      "family": "Reseam",
+      "loader": "reseam",
+      "coordinate": "app.reseam:reseam:0.38.0",
+      "dependencies": [],
+      "range": "*",
+      "fallback": true,
+      "executables": {
+        "windows-x64": {
+          "url": "https://cdn.reseam.app/engine/v0.38.0/reseam-windows-x64.exe",
+          "sha256": "da365620e6f580b98e9653aa5c2c34f1ee07a1fcb5b675f3a56615c87bfbb1b9"
+        },
+        "linux-x64": {
+          "url": "https://cdn.reseam.app/engine/v0.38.0/reseam-linux-x64",
+          "sha256": "d1af5c9645bd81f00ad3d0766784000b6a1bfba5089d148b6aff0027909bbb1d"
+        }
+      }
     },
     {
       "id": "reseam-v0-37-1",

@@ -36,7 +36,7 @@ class PatcherRuntimeSelectionTest {
 
     @Test fun shippedMorpheTriesDeclaredRuntimeThenNewestToOldest() {
         val config = shipped()
-        val newestFirst = listOf("morphe-latest", "morphe-1-15-1", "morphe-1-14-0", "morphe-1-12-0",
+        val newestFirst = listOf("morphe-latest", "morphe-2-1-0", "morphe-2-0-1", "morphe-1-15-1", "morphe-1-14-0", "morphe-1-12-0",
             "morphe-1-7-0", "morphe-1-5-2", "morphe-1-4-2", "morphe-1-3-1",
             "morphe-1-3-0", "morphe-12", "morphe-early")
         val preferred = mapOf(
@@ -45,7 +45,8 @@ class PatcherRuntimeSelectionTest {
             "1.3.1" to "morphe-1-3-1", "1.5.2" to "morphe-1-5-2",
             "1.12.0" to "morphe-1-12-0", "1.14.0" to "morphe-1-14-0",
             "1.15.1" to "morphe-1-15-1",
-            "1.9.0" to "morphe-latest", "2.0.0" to "morphe-latest", "2.0.1" to "morphe-latest")
+            "2.0.1" to "morphe-2-0-1", "2.1.0" to "morphe-2-1-0",
+            "1.9.0" to "morphe-latest", "2.0.0" to "morphe-latest", "2.2.0" to "morphe-latest")
         for ((declaration, first) in preferred) {
             assertEquals(listOf(first) + newestFirst.filter { it != first },
                 selectRuntimes(config, "Morphe:V1", declaration).map { it.id })
