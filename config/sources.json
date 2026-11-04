@@ -790,11 +790,6 @@
     "integrations": false,
     "disabled": false
   },
-  "roundsalmon4": {
-    "patches": "https://github.com/RoundSalmon4/morphe-patches-template",
-    "integrations": false,
-    "disabled": false
-  },
   "hu-liberator": {
     "patches": "https://github.com/hu-liberator/patches",
     "integrations": false,
@@ -1955,11 +1950,6 @@
     "integrations": false,
     "disabled": false
   },
-  "tachibana-shin": {
-    "patches": "https://github.com/tachibana-shin/morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "origin-island": {
     "patches": "https://github.com/JacksonJones2003/origin-island-patches",
     "integrations": false,
@@ -2757,6 +2747,46 @@
   },
   "yt-music-morphe-pitch-patch": {
     "patches": "https://github.com/AnTo88-svg/YT-Music-Morphe-Pitch-Patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "nl-morphe-patches": {
+    "patches": "https://gitlab.com/johninnld/nl-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "tomtom-patches": {
+    "patches": "https://gitlab.com/georgewoodall82/tomtom-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sygic-patches": {
+    "patches": "https://gitlab.com/georgewoodall82/sygic-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "kplus-root-bypass": {
+    "patches": "https://github.com/ak-a-ra/kplus-root-bypass",
+    "integrations": false,
+    "disabled": false
+  },
+  "proxy-patches": {
+    "patches": "https://github.com/TahmidSummy/proxy-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "wordfeud-word-finder": {
+    "patches": "https://github.com/Jeroenimo02/Wordfeud-Word-Finder",
+    "integrations": false,
+    "disabled": false
+  },
+  "loki-patches": {
+    "patches": "https://github.com/lokesh-sparrow/loki-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "zerobun-morphe-patches": {
+    "patches": "https://github.com/zerobun0/zerobun-morphe-patches",
     "integrations": false,
     "disabled": false
   }
