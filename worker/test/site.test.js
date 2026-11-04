@@ -139,18 +139,18 @@ function cardHarness(bundleType = "ReVanced:v21", overrides = {}, fetchChangelog
   };
 }
 
-test("Bundle cards open details and retain runtime guidance without an inline patch button", () => {
+test("Bundle cards open details without an inline patch button or URV warning banner", () => {
   const card = cardHarness().render();
   assert.match(card.innerHTML, /badge-latest[^]*?Latest/);
   assert.match(card.innerHTML, /owner-avatar-link bundle-icon/);
-  assert.match(card.innerHTML, /Requires the ReVanced v21 runtime plugin/);
+  assert.doesNotMatch(card.innerHTML, /Requires the ReVanced v21 runtime plugin/);
   assert.doesNotMatch(card.innerHTML, /data-toggle-patches|data-patch-search/);
   assert.equal(typeof card.openDetails, "function");
 });
 
-test("Reseam cards explain the URV runtime requirement", () => {
+test("Reseam cards do not render URV runtime warning", () => {
   const card = cardHarness("Reseam").render();
-  assert.match(card.innerHTML, /Requires the Reseam runtime plugin in order to be used in URV/);
+  assert.doesNotMatch(card.innerHTML, /Requires the Reseam runtime plugin in order to be used in URV/);
   assert.doesNotMatch(card.innerHTML, /Requires the ReVanced v21/);
 });
 

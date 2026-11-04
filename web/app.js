@@ -982,11 +982,6 @@ function renderBundle(bundle, target) {
         ? `<div class="v3-warning">Repository unavailable: ${escapeHtml(bundle.unavailableReason)}. Showing retained release information.</div>` : "";
     const metadataWarning = bundle.metadataStatus !== "verified"
         ? `<div class="v3-warning">Patch metadata: ${escapeHtml(bundle.metadataStatus)}${bundle.metadataVersion ? " · " + escapeHtml(bundle.metadataVersion) : ""}. Compatibility is unverified for this artifact.</div>` : "";
-    const v3WarningHtml = ["ReVanced:v21", "Reseam"].includes(bundle.bundleType)
-        ? `<div class="v3-warning">
-                ⚠️ Requires the ${bundle.bundleType === "Reseam" ? "Reseam" : "ReVanced v21"} runtime plugin in order to be used in URV.
-           </div>`
-        : '';
     const tagUrl = releaseTagUrl(bundle);
     const versionHtml = tagUrl
         ? `<a class="version-text" href="${escapeHtml(tagUrl)}" target="_blank" rel="noopener">${escapeHtml(bundle.version)}</a>`
@@ -1008,7 +1003,6 @@ function renderBundle(bundle, target) {
                     bundle.metadataStatus !== "verified")
                 : iconAction("link", copyLabel, escapeHtml, {copy: registryUrl})}
         </div>
-        ${v3WarningHtml}
         ${metadataWarning}
         ${availabilityWarning}
 
