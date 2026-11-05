@@ -3114,5 +3114,45 @@
     "patches": "https://github.com/suakamargas121/bookish-guacamole",
     "integrations": false,
     "disabled": false
+  },
+  "morphe-reddit-keyword-filter": {
+    "patches": "https://github.com/bryceaspringfield/morphe-reddit-keyword-filter",
+    "integrations": false,
+    "disabled": false
+  },
+  "ffejhog-morphe-patches": {
+    "patches": "https://github.com/ffejhog/ffejhog_morphe_patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-google-messages-patch": {
+    "patches": "https://github.com/coloradude/morphe-google-messages-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "sk1nnnny-morphe-patche": {
+    "patches": "https://github.com/sk1nnnny/morphe-patche",
+    "integrations": false,
+    "disabled": false
+  },
+  "atresplayer-patches": {
+    "patches": "https://github.com/pilahito/atresplayer-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "yazio-patches": {
+    "patches": "https://github.com/DasCarstel/yazio-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gaugau-morphe": {
+    "patches": "https://github.com/Kdroidwin/gaugau-morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-bilibili-danmaku": {
+    "patches": "https://github.com/RizkLee/morphe-bilibili-danmaku",
+    "integrations": false,
+    "disabled": false
   }
 }
