@@ -187,12 +187,24 @@
       "fallback": true
     },
     {
-      "id": "morphe-latest",
+      "id": "morphe-2-2-0",
       "family": "Morphe:V1",
       "loader": "morphe",
       "coordinate": "app.morphe:morphe-patcher:2.2.0",
       "dependencies": [
         "app.morphe:morphe-patcher:2.2.0",
+        "com.google.code.gson:gson:2.14.0"
+      ],
+      "range": null,
+      "fallback": true
+    },
+    {
+      "id": "morphe-latest",
+      "family": "Morphe:V1",
+      "loader": "morphe",
+      "coordinate": "app.morphe:morphe-patcher:2.3.0",
+      "dependencies": [
+        "app.morphe:morphe-patcher:2.3.0",
         "com.google.code.gson:gson:2.14.0"
       ],
       "range": ">1.2.0",
