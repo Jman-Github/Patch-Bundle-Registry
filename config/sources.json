@@ -1370,11 +1370,6 @@
     "integrations": false,
     "disabled": false
   },
-  "headboy": {
-    "patches": "https://github.com/headboy99/headboy-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "povo-2-0": {
     "patches": "https://github.com/roflsunriz/povo-2.0-revanced",
     "integrations": false,
@@ -2315,11 +2310,6 @@
     "integrations": false,
     "disabled": false
   },
-  "pancake-patches": {
-    "patches": "https://github.com/Ikuradachi/pancake-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "urroxyz-morphe": {
     "patches": "https://github.com/urroxyz/morphe-patches",
     "integrations": false,
@@ -2985,11 +2975,6 @@
     "integrations": false,
     "disabled": false
   },
-  "codeghost-patches": {
-    "patches": "https://github.com/codeghost-glitch/codeghost-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "morphe-patches-samsung": {
     "patches": "https://github.com/whythishome/morphe-patches-samsung",
     "integrations": false,
@@ -3152,6 +3137,76 @@
   },
   "morphe-bilibili-danmaku": {
     "patches": "https://github.com/RizkLee/morphe-bilibili-danmaku",
+    "integrations": false,
+    "disabled": false
+  },
+  "gracie-patches": {
+    "patches": "https://github.com/Sabrina-Moonlight/gracie-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "slick-morphe": {
+    "patches": "https://github.com/3kh0/slick-morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "kagebili": {
+    "patches": "https://github.com/Ikuradachi/Kagebili",
+    "integrations": false,
+    "disabled": false
+  },
+  "vk-video-revanced-patches": {
+    "patches": "https://github.com/byDimasik/vk-video-revanced-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-smartnews": {
+    "patches": "https://github.com/haukist/morphe-patches-smartnews",
+    "integrations": false,
+    "disabled": false
+  },
+  "orangetree-morphe-patches": {
+    "patches": "https://github.com/OrangeTree-Dev/Morphe-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "navhi-morphe-patches": {
+    "patches": "https://github.com/ravhirizaldi/navhi-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "qq-lite-patches": {
+    "patches": "https://github.com/LostPRC/qq-lite-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "pablobaro-morphe-patches": {
+    "patches": "https://github.com/pablobaro/pablobaro-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "waze-audio-patches": {
+    "patches": "https://github.com/pomee4/waze-audio-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ajcubes-morphe-patches": {
+    "patches": "https://github.com/AJcubes/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "hxdes08-samsung-notes-patch": {
+    "patches": "https://github.com/hxdes08/hxdes08_samsung_notes_patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "kageroll": {
+    "patches": "https://github.com/Ikuradachi/Kageroll",
+    "integrations": false,
+    "disabled": false
+  },
+  "kagecarbit": {
+    "patches": "https://github.com/Ikuradachi/Kagecarbit",
     "integrations": false,
     "disabled": false
   }
