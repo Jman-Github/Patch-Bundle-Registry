@@ -2460,11 +2460,6 @@
     "integrations": false,
     "disabled": false
   },
-  "instagram-custom-branding-patches": {
-    "patches": "https://github.com/yashsehrawatdelete550-dotg/instagram-custom-branding-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "alexandrel-morphe": {
     "patches": "https://github.com/alexandreL/morphe-patches",
     "integrations": false,
@@ -3232,6 +3227,36 @@
   },
   "box-md-preview": {
     "patches": "https://github.com/haya9924/box_md_preview",
+    "integrations": false,
+    "disabled": false
+  },
+  "flyme-lyrics-patches": {
+    "patches": "https://github.com/kljjh/flyme-lyrics-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "bryceaspringfield-morphe": {
+    "patches": "https://github.com/bryceaspringfield/morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "googlemap-morphe": {
+    "patches": "https://github.com/shuili1013/GoogleMap-Morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "vogelkop-morphepatches": {
+    "patches": "https://github.com/maniesh-NR/Vogelkop-MorphePatches",
+    "integrations": false,
+    "disabled": false
+  },
+  "pardhu23-morphe-patches": {
+    "patches": "https://github.com/pardhu23/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "shikify": {
+    "patches": "https://github.com/0xRJDev/shikify",
     "integrations": false,
     "disabled": false
   }
