@@ -11,6 +11,10 @@ const relations = {
 };
 const kinds = new Set(["source", "source_metadata", "bundle", "patch", "package",
   "patch_package", "app", "refresh_jobs", "history_release", "history_source"]);
+// Singular relationships resolve to exactly one visible row per parent value,
+// so concurrent GraphQL lookups can share one IN query per microtask.
+const singleRelations = new Set(["source:source_metadata", "source_metadata:source",
+  "bundle:source", "patch:bundle", "patch_package:package", "patch_package:patch"]);
 const safe = /^[a-zA-Z_][a-zA-Z_0-9]*$/;
 const col = (alias, field) => {
   if (!safe.test(field)) throw new CatalogError("Invalid query field");
@@ -29,6 +33,7 @@ export class D1Catalog extends Catalog {
     this.cacheDocuments = cacheDocuments;
     const session = env.DB.withSession ? env.DB.withSession("first-primary") : env.DB;
     this.queryCache = new Map();
+    this.relationLoads = new Map();
     this.db = {prepare: sql => {
       let statement = session.prepare(sql), bindings = [];
       const run = mode => {
@@ -169,6 +174,53 @@ export class D1Catalog extends Catalog {
       kind === "package" ? {patch_packages:{patch:{bundle}}} : null;
     return visibility ? {_and:[args.where ?? {},visibility]} : args.where;
   }
+  relationRows(kind, args, extra, parentKind) {
+    if (!extra || extra.value == null || !singleRelations.has(parentKind + ":" + kind))
+      return this.rows(kind, args, extra);
+    // Filters, ordering and pagination are uncommon on singular GraphQL
+    // relationships; fall back to the exact rows() path when present.
+    if (Object.keys(args ?? {}).some(key => key !== "include_archived"))
+      return this.rows(kind, args, extra);
+    const archived = Boolean(args?.include_archived);
+    const key = kind + ":" + extra.field + ":" + archived;
+    let batch = this.relationLoads.get(key);
+    if (!batch) {
+      batch = {kind, field: extra.field, archived, pending: new Map(), scheduled: false};
+      this.relationLoads.set(key, batch);
+    }
+    return new Promise((resolve, reject) => {
+      const waiting = batch.pending.get(extra.value);
+      if (waiting) waiting.push({resolve, reject});
+      else batch.pending.set(extra.value, [{resolve, reject}]);
+      if (!batch.scheduled) {
+        batch.scheduled = true;
+        queueMicrotask(() => this.flushRelationRows(key, batch));
+      }
+    });
+  }
+  async flushRelationRows(key, batch) {
+    // Replace the batch before yielding so later lookups join a fresh one.
+    this.relationLoads.delete(key);
+    const found = new Map();
+    try {
+      const values = [...batch.pending.keys()];
+      for (let offset = 0; offset < values.length; offset += 80) {
+        const chunk = values.slice(offset, offset + 80);
+        const rows = await this.rows(batch.kind, {where: {[batch.field]: {_in: chunk}},
+          include_archived: batch.archived, limit: chunk.length});
+        for (const row of rows) {
+          const value = row[batch.field];
+          if (!found.has(value)) found.set(value, []);
+          found.get(value).push(row);
+        }
+      }
+      for (const [value, waiting] of batch.pending)
+        for (const waiter of waiting) waiter.resolve(found.get(value) ?? []);
+    } catch (error) {
+      for (const waiting of batch.pending.values())
+        for (const waiter of waiting) waiter.reject(error);
+    }
+  }
   async rows(kind, args = {}, extra = null, maximum = 100) {
     if (!kinds.has(kind)) throw new Unsupported();
     if (args.generation && args.generation !== this.manifest.generation)
@@ -283,7 +335,8 @@ export class D1Catalog extends Catalog {
       this.visible("r")+" AND "+col("r","catalog_id")+" IN (SELECT value FROM json_each(?))")
       .bind(kind,JSON.stringify(wanted)).all()).results;
     const rows=new Map(data.map(item=>{const row=JSON.parse(item.data);return [row.catalog_id,{...row,__kind:kind}];}));
-    selected.data=await this.restRows(wanted.map(id=>rows.get(id)));
+    // The initial source scan already loaded these rows.
+    selected.data=await this.restRows(wanted.map(id=>rows.get(id)),byId);
     return selected;
   }
   async legacyBundles(owner, repo, version, mode) {
@@ -297,7 +350,7 @@ export class D1Catalog extends Catalog {
     } else where.version={_eq:version};
     const rows=await this.scan("bundle",where,{sql:col("r","source_fk")+" IN (SELECT value FROM json_each(?))",
       bindings:[JSON.stringify(sources.map(row=>row.id))]});
-    return this.restRows(rows);
+    return this.restRows(rows,new Map(sources.map(source=>[source.id,source])));
   }
   async sourceIds(identifier) {
     const url = identifier.includes("/") ? normalizeSource(identifier).toLowerCase() : identifier.toLowerCase();
@@ -370,15 +423,13 @@ export class D1Catalog extends Catalog {
       this.visible("r")+" AND "+col("r","catalog_id")+" IN (SELECT value FROM json_each(?))")
       .bind(JSON.stringify(ids)).all()).results;
     const rows=new Map(raw.map(item=>{const row=JSON.parse(item.data);return [row.catalog_id,row];}));
-    const bundles=new Map();
+    // Hydrate every referenced bundle and source in two batches instead of 2× page size.
+    const bundles=await this.hydratedBundles([...rows.values()].map(row=>row.bundle_id));
     const result=[];
     for (const id of ids) {
       const row=rows.get(id);
-      if (!bundles.has(row.bundle_id)) {
-        const bundle=(await this.rows("bundle",{where:{catalog_id:{_eq:row.bundle_id}},limit:1}))[0];
-        if (bundle) bundles.set(row.bundle_id,await this.restRow(bundle));
-      }
-      if (bundles.has(row.bundle_id)) result.push({...row,id,legacy_id:row.id,
+      if (!row || !bundles.has(row.bundle_id)) continue;
+      result.push({...row,id,legacy_id:row.id,
         bundle:bundles.get(row.bundle_id),patch_packages:patchPackages({...row,id})});
     }
     return result;
@@ -426,26 +477,36 @@ export class D1Catalog extends Catalog {
       const data = rows.slice(0,maximum).map(row=>({...row,id:row.catalog_id,legacy_id:row.id}));
       return {rows:data,next_cursor:rows.length>maximum?offset+maximum:null,candidate_pages:1};
     }
-    const sources = new Map();
     const bundles = args.bundle_rows ? new Map(args.bundle_rows.map(row=>[row.id,row])) : new Map();
-    for (const row of rows.slice(0,maximum)) if (!bundles.has(row.bundle_id)) {
-      const bundle = (await this.rows("bundle",{where:{catalog_id:{_eq:row.bundle_id}},limit:1}))[0];
-      if (bundle) {
-        if (!sources.has(bundle.catalog_id)) sources.set(bundle.catalog_id,await this.restRow(bundle));
-        bundles.set(row.bundle_id,sources.get(bundle.catalog_id));
-      }
-    }
+    const missing = [...new Set(rows.slice(0,maximum).map(row=>row.bundle_id))].filter(id=>!bundles.has(id));
+    for (const [id,bundle] of await this.hydratedBundles(missing)) bundles.set(id,bundle);
     const data = rows.slice(0,maximum).filter(row=>bundles.has(row.bundle_id))
       .map(row=>({...row,id:row.catalog_id,legacy_id:row.id,bundle:bundles.get(row.bundle_id),patch_packages:patchPackages({...row,id:row.catalog_id})}));
     return {rows:data,next_cursor:rows.length>maximum?offset+maximum:null,candidate_pages:1};
   }
-  async restRows(rows) {
-    const ids=[...new Set(rows.filter(row=>row.__kind==="bundle").map(row=>row.source_fk))];
+  async sourceRecords(rows) {
+    const ids=[...new Set([...rows].map(row=>row.source_fk))];
     const sources=new Map();
     // Stay below the filter binding limit and avoid one D1 query per bundle.
     for (let offset=0;offset<ids.length;offset+=80)
       for (const source of await this.rows("source",{where:{id:{_in:ids.slice(offset,offset+80)}},limit:80}))
         sources.set(source.id,source);
+    return sources;
+  }
+  async hydratedBundles(ids) {
+    const unique=[...new Set(ids)], records=new Map();
+    for (let offset=0;offset<unique.length;offset+=80)
+      for (const bundle of await this.rows("bundle",{where:{catalog_id:{_in:unique.slice(offset,offset+80)}},limit:80}))
+        records.set(bundle.catalog_id,bundle);
+    if (!records.size) return records;
+    const sources=await this.sourceRecords(records.values());
+    const bundles=new Map();
+    // Hydration only reshapes loaded rows; it must not issue one query per bundle.
+    for (const [id,bundle] of records) bundles.set(id,await this.restRow(bundle,sources));
+    return bundles;
+  }
+  async restRows(rows, sources = null) {
+    sources ??= await this.sourceRecords(rows.filter(row=>row.__kind==="bundle"));
     return Promise.all(rows.map(row=>this.restRow(row,sources)));
   }
   async restRow(row, sources = null) {
@@ -552,7 +613,7 @@ export class D1Catalog extends Catalog {
     const extra = {field:childKey,value:source[parentKey]};
     if (aggregate) return {handled:true,value:{aggregate:{count:countArgs=>this.count(kind,args,extra,countArgs)},
       nodes:()=>this.rows(kind,args,extra)}};
-    const rows = await this.rows(kind,args,extra);
+    const rows = await this.relationRows(kind,args,extra,source.__kind);
     return {handled:true,value:getNamedType(info.returnType).name === kind &&
       !String(info.returnType).includes("[") ? rows[0] ?? null : rows};
   }
@@ -623,14 +684,18 @@ export class D1Catalog extends Catalog {
           const extra = {field:childKey,value:source[parentKey]};
           if (aggregateRelation) return {aggregate:{count:countArgs=>this.count(kind,args,extra,countArgs)},
             nodes:()=>this.rows(kind,args,extra)};
-          const rows = await this.rows(kind,args,extra);
+          const rows = await this.relationRows(kind,args,extra,source?.__kind);
           return getNamedType(info.returnType).name === kind &&
             !String(info.returnType).includes("[") ? rows[0] ?? null : rows;
         }
         if (info.parentType.name === "historical_release" && info.fieldName === "document")
           return this.historyDocument(source.id,args);
-        if (source?.__kind === "bundle" && ["icon_url","owner_avatar_url"].includes(info.fieldName))
-          return (await this.restRow(source))[info.fieldName];
+        if (source?.__kind === "bundle" && ["icon_url","owner_avatar_url"].includes(info.fieldName)) {
+          // Icon fields share the batched source lookup used by bundle.source.
+          const rows = await this.relationRows("source", {include_archived: source.__archived},
+            {field: "id", value: source.source_fk}, source.__kind);
+          return bundleImages({...source, source: rows[0] ?? null})[info.fieldName];
+        }
         const value = source?.[info.fieldName];
         return typeof value === "function" ? value(args) : value;
       }

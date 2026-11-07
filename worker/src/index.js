@@ -126,6 +126,12 @@ function legacyDto(bundle) {
       bundle.signature_download_url === "N/A" ? "" : (bundle.signature_download_url ?? ""),
     ...bundleImages(bundle) };
 }
+async function fullBundle(catalog, bundle) {
+  // D1 bundle rows already merge their detail document; only static snapshots
+  // split summaries and per-bundle detail files across R2 objects.
+  return catalog.rows ? bundle :
+    { ...bundle, ...(await catalog.file("bundles/" + bundle.id + ".json")) };
+}
 
 /** Retrieve the publisher's native index, checking cached identity when available. */
 async function fetchReseamIndex(releaseUrl, env) {
@@ -334,7 +340,7 @@ async function rest(catalog, url, env = {}) {
     }
     const args = {where,limit:Number(params.get("limit") ?? 25),offset:Number(params.get("offset") ?? 0),
       include_archived:true,generation:params.get("generation")};
-    return {generation:catalog.manifest.generation,data:await Promise.all((await catalog.rows(historicalKind,args)).map(row=>catalog.restRow(row))),
+    return {generation:catalog.manifest.generation,data:await catalog.restRows(await catalog.rows(historicalKind,args)),
       total:await catalog.count(historicalKind,{where,include_archived:true}),limit:args.limit,offset:args.offset};
   }
   if (catalog.history && path.startsWith("/history/")) {
@@ -351,7 +357,7 @@ async function rest(catalog, url, env = {}) {
     if (path === "/history/sources") {
       const args = {limit:Number(params.get("limit") ?? 25),offset:Number(params.get("offset") ?? 0),generation:params.get("generation")};
       const rows = await catalog.rows("history_source",args);
-      return {data:await Promise.all(rows.map(row=>catalog.restRow(row))),total:await catalog.count("history_source"),...args,generation:catalog.manifest.generation};
+      return {data:await catalog.restRows(rows),total:await catalog.count("history_source"),...args,generation:catalog.manifest.generation};
     }
   }
   if (catalog.rows && ["/sources","/bundles","/releases"].includes(path)) {
@@ -370,7 +376,7 @@ async function rest(catalog, url, env = {}) {
     if (simple) {
       const args = {...restArgs(params,["id"]),where,order_by:{catalog_id:"asc"}};
       if (kind === "bundle") args.where = {...where,source:{...(where.source ?? {}),enabled:{_eq:true}}};
-      const data = await Promise.all((await catalog.rows(kind,args)).map(row=>catalog.restRow(row)));
+      const data = await catalog.restRows(await catalog.rows(kind,args));
       return {data,total:await catalog.count(kind,{where:args.where}),limit:args.limit,offset:args.offset};
     }
     const args={...restArgs(params,kind==="bundle"?["id","version","created_at","patch_count"]:["id","url","repo"]),where};
@@ -397,8 +403,7 @@ async function rest(catalog, url, env = {}) {
       compareReleaseDates(a, b) ||
       Number(b.channels.length > 0) - Number(a.channels.length > 0));
     if (!bundles.length) throw new CatalogError("No cached bundle matches source and version", 404);
-    const bundle = { ...bundles[0], ...(await catalog.file("bundles/" + bundles[0].id + ".json")),
-                     source: bundles[0].source };
+    const bundle = { ...await fullBundle(catalog, bundles[0]), source: bundles[0].source };
     if (path === "/api/reseam/patches.json") return reseamReleaseIndex(bundle, env);
     if (path === "/api/reseam/bundle") {
       if (bundle.bundle_type !== "Reseam") throw new CatalogError("Source has no matching Reseam bundle", 404);
@@ -423,7 +428,7 @@ async function rest(catalog, url, env = {}) {
       .then(rows=>rows[0] && catalog.restRow(rows[0])) :
       (await catalog.bundles()).find(b => b.legacy_id === Number(numeric[1]));
     if (!bundle) throw new CatalogError("Bundle not found", 404);
-    return legacyDto({ ...bundle, ...(await catalog.file("bundles/" + bundle.id + ".json")) });
+    return legacyDto(await fullBundle(catalog, bundle));
   }
   const compatibility = path.match(/^\/api\/v[12]\/bundle\/([^/]+)\/([^/]+)\/([^/]+)$/);
   if (compatibility) {
@@ -446,8 +451,7 @@ async function rest(catalog, url, env = {}) {
     });
     if (version === "latest") bundles.sort(compareReleaseDates);
     if (!bundles.length) throw new CatalogError("Bundle not found", 404);
-    const bundle = bundles[0];
-    return legacyDto({ ...bundle, ...(await catalog.file("bundles/" + bundle.id + ".json")) });
+    return legacyDto(await fullBundle(catalog, bundles[0]));
   }
   const normalized = path.replace(/^\/api\/v1/, "");
   const appMatch = normalized.match(/^\/apps\/([^/]+)(?:\/(bundles|patches))?$/);

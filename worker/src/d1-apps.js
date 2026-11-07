@@ -107,11 +107,14 @@ export async function browseApps(catalog, params, args, packageName = null, bund
       catalog.visible("b")+" AND json_extract(data,'$.catalog_id') IN (SELECT value FROM json_each(?))")
       .bind(JSON.stringify(ids)).all()).results.map(item=>{const row=JSON.parse(item.data);return {...row,id:row.catalog_id};});
     const page=selectRows(candidates,args);
-    page.data=await Promise.all(page.data.map(async row=>{
-      const bundle=(await catalog.rows("bundle",{where:{catalog_id:{_eq:row.id}},limit:1}))[0];
+    // Hydrate the selected page with one bundle batch and one source batch.
+    const bundles=await catalog.hydratedBundles(page.data.map(row=>row.id));
+    page.data=page.data.map(row=>{
+      const bundle=bundles.get(row.id);
+      if (!bundle) throw new CatalogError("Bundle not found",503);
       const {source_id,...compatibility}=references.get(row.id);
-      return {...await catalog.restRow(bundle),app_compatibility:compatibility};
-    }));
+      return {...bundle,app_compatibility:compatibility};
+    });
     return page;
   }
   return selectRows(summaries.map(clean),args);
