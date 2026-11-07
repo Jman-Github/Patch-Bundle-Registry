@@ -3209,5 +3209,30 @@
     "patches": "https://github.com/Ikuradachi/Kagecarbit",
     "integrations": false,
     "disabled": false
+  },
+  "carbridge-patches": {
+    "patches": "https://github.com/jmwerk/carbridge-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ayufa-youtube-patches": {
+    "patches": "https://github.com/Ayufa/ayufa-youtube-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "twrailway-patch": {
+    "patches": "https://github.com/GahahaWang/TWRailway-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "salmanbappi-quwis-patches": {
+    "patches": "https://github.com/salmanbappi/Quwis-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "box-md-preview": {
+    "patches": "https://github.com/haya9924/box_md_preview",
+    "integrations": false,
+    "disabled": false
   }
 }
