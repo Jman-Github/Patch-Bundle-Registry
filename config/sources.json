@@ -3259,5 +3259,40 @@
     "patches": "https://github.com/0xRJDev/shikify",
     "integrations": false,
     "disabled": false
+  },
+  "waylo-patches": {
+    "patches": "https://github.com/way-lo/waylo-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "aayy-dev": {
+    "patches": "https://github.com/aayy-dev/patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "chefkoch-android-patches": {
+    "patches": "https://github.com/drtgrf/chefkoch-android-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "vocacolle-reseam-patches": {
+    "patches": "https://github.com/ilikeadofai/vocacolle-reseam-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sync-patches": {
+    "patches": "https://github.com/sazap10/sync-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "aryplus-morphe-patches": {
+    "patches": "https://gitlab.com/kamander700/aryplus-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "severit-morphe-patches": {
+    "patches": "https://github.com/SeveriT/morphe-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
