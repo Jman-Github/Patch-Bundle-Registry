@@ -2290,11 +2290,6 @@
     "integrations": false,
     "disabled": false
   },
-  "buienradar-patches": {
-    "patches": "https://github.com/wouter075/buienradar-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "gaming-hub-morphe": {
     "patches": "https://github.com/ratatabananana-bit/gaming-hub-morphe-patches",
     "integrations": false,
@@ -2685,11 +2680,6 @@
     "integrations": false,
     "disabled": false
   },
-  "yahoo-transit-patches": {
-    "patches": "https://github.com/MohuttTT/yahoo-transit-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "facebook-marketplace-patches": {
     "patches": "https://github.com/MegaTheLEGEND/Facebook-Marketplace",
     "integrations": false,
@@ -2972,11 +2962,6 @@
   },
   "morphe-patches-samsung": {
     "patches": "https://github.com/whythishome/morphe-patches-samsung",
-    "integrations": false,
-    "disabled": false
-  },
-  "bol-patches": {
-    "patches": "https://github.com/wouter075/bol-patches",
     "integrations": false,
     "disabled": false
   },
@@ -3292,6 +3277,166 @@
   },
   "severit-morphe-patches": {
     "patches": "https://github.com/SeveriT/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "edbfi": {
+    "patches": "https://github.com/edbfi/revanced-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "temsah-morphe-patches": {
+    "patches": "https://github.com/temsah/temsah-Morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "viutv-patches": {
+    "patches": "https://github.com/hkopenclaw/viutv-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "wizzwuz-morphe-patch": {
+    "patches": "https://github.com/wizzwuz/morphe-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "transit-patches": {
+    "patches": "https://github.com/oliver-leung/transit-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "globberry-morphe-patches": {
+    "patches": "https://github.com/Globberry/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "bin0culars-patches": {
+    "patches": "https://github.com/bin0culars/bin0culars-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sey-morphe-patches": {
+    "patches": "https://github.com/seythegamer/sey-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "blelle-s-patches": {
+    "patches": "https://github.com/Blelle/Blelle-s-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "timetree-ads-patch": {
+    "patches": "https://github.com/Rico957/timetree-ads-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "unison-morphe-patches": {
+    "patches": "https://github.com/LuckyTheCookie/unison-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "xagerestrictionfixer": {
+    "patches": "https://github.com/brainage04/XAgeRestrictionFixer",
+    "integrations": false,
+    "disabled": false
+  },
+  "jo-patches": {
+    "patches": "https://gitlab.com/JoPatches/jo-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "modprod-apk-creator": {
+    "patches": "https://github.com/MOD-PROD/modprod-apk-creator",
+    "integrations": false,
+    "disabled": false
+  },
+  "medium-morphe-patches": {
+    "patches": "https://github.com/Kenny201/medium-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "facebook-morphe-patches": {
+    "patches": "https://github.com/Just-a-lurker/facebook-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-youtube-tv-shorts": {
+    "patches": "https://github.com/NRXQuantum/morphe-youtube-tv-shorts",
+    "integrations": false,
+    "disabled": false
+  },
+  "beeper-revanced-patches": {
+    "patches": "https://github.com/QuentinN42/beeper-revanced-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sobosuba-morphe-patches": {
+    "patches": "https://github.com/elouangrimm/sobosuba-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "reseam-duopatch": {
+    "patches": "https://github.com/MrPigss/Reseam-DuoPatch",
+    "integrations": false,
+    "disabled": false
+  },
+  "sledgesune-morphe-patches": {
+    "patches": "https://github.com/SledgeSune/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-lihkg-patches": {
+    "patches": "https://github.com/ghostknow/morphe-lihkg-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "kayo-morphe-patches": {
+    "patches": "https://github.com/AzizPatel786/kayo-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "galaxyxr-steamlink-patches": {
+    "patches": "https://github.com/4uva4ek/galaxyxr-steamlink-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "cinemahq-morphe-patches": {
+    "patches": "https://github.com/AbShaheen184/CinemaHQ-Morphe_Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "educational-morphe-patches": {
+    "patches": "https://github.com/Mhs11294/educational-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "libby-patches": {
+    "patches": "https://github.com/Tomveloper/libby-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "np-morphe-patches": {
+    "patches": "https://github.com/prtmN5H1/NP-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "kmmiio99o-reseam-patches": {
+    "patches": "https://github.com/kmmiio99o/reseam-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "rj-patches": {
+    "patches": "https://gitlab.com/rudrakshrajpurohit417/rj-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "cyberjoe": {
+    "patches": "https://github.com/joelmzj/cyberjoe",
+    "integrations": false,
+    "disabled": false
+  },
+  "yuna-calendar-patches": {
+    "patches": "https://github.com/YunaAUbot/yuna-calendar-patches",
     "integrations": false,
     "disabled": false
   }
