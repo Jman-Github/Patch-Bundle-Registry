@@ -3285,11 +3285,6 @@
     "integrations": false,
     "disabled": false
   },
-  "temsah-morphe-patches": {
-    "patches": "https://github.com/temsah/temsah-Morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "viutv-patches": {
     "patches": "https://github.com/hkopenclaw/viutv-patches",
     "integrations": false,
@@ -3437,6 +3432,61 @@
   },
   "yuna-calendar-patches": {
     "patches": "https://github.com/YunaAUbot/yuna-calendar-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "kanye-morphe-patches": {
+    "patches": "https://github.com/zimza1abim/kanye-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sby-patches": {
+    "patches": "https://github.com/saadbinyousaf1/sby-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gemini-work-profile-patches": {
+    "patches": "https://github.com/Johannes7k75/gemini-work-profile-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "larpude": {
+    "patches": "https://github.com/nivalox/Larpude",
+    "integrations": false,
+    "disabled": false
+  },
+  "farotv-patches": {
+    "patches": "https://github.com/jair1c/farotv-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "viper-patches": {
+    "patches": "https://github.com/sabbirdj/viper-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "rajs-morphe-patches": {
+    "patches": "https://github.com/Rajdave69/rajs-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "spotify-merged-patches": {
+    "patches": "https://github.com/Martinikaws/spotify-merged-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "expertraw-morphe-patches": {
+    "patches": "https://github.com/ShortEnigma0/expertraw-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "shank-patches": {
+    "patches": "https://github.com/ShankGV/shank-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "swiftkey-clipboard-patches": {
+    "patches": "https://github.com/M1zir/swiftkey-clipboard-patches",
     "integrations": false,
     "disabled": false
   }
