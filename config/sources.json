@@ -3385,11 +3385,6 @@
     "integrations": false,
     "disabled": false
   },
-  "kayo-morphe-patches": {
-    "patches": "https://github.com/AzizPatel786/kayo-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "galaxyxr-steamlink-patches": {
     "patches": "https://github.com/4uva4ek/galaxyxr-steamlink-patches",
     "integrations": false,
@@ -3480,13 +3475,118 @@
     "integrations": false,
     "disabled": false
   },
-  "shank-patches": {
-    "patches": "https://github.com/ShankGV/shank-patches",
+  "swiftkey-clipboard-patches": {
+    "patches": "https://github.com/M1zir/swiftkey-clipboard-patches",
     "integrations": false,
     "disabled": false
   },
-  "swiftkey-clipboard-patches": {
-    "patches": "https://github.com/M1zir/swiftkey-clipboard-patches",
+  "hoitruyenchu-patches": {
+    "patches": "https://github.com/CozyCode890/HoiTruyenChu-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "db-navigator-patches": {
+    "patches": "https://github.com/henr1klmb/db-navigator-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-rif-import-history": {
+    "patches": "https://github.com/Arnaumes/revanced-rif-import-history",
+    "integrations": false,
+    "disabled": false
+  },
+  "warreth-morphe-patches": {
+    "patches": "https://github.com/warreth/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "bugsmith-morphe-patches": {
+    "patches": "https://github.com/thebugsmith/bugsmith-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "niagara-left-patches": {
+    "patches": "https://github.com/theodotdot/niagara-left-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gvoice-patches": {
+    "patches": "https://github.com/abegumbo-ui/gvoice-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "lockstar-clock-patch": {
+    "patches": "https://github.com/sebsebseb9b/lockstar-clock-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "avito-patches": {
+    "patches": "https://github.com/Nizarberyan/Avito-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "hxmst-morphe-patches": {
+    "patches": "https://github.com/hxmst/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "extended-youtube-playlists": {
+    "patches": "https://github.com/chocolavv/extended-youtube-playlists",
+    "integrations": false,
+    "disabled": false
+  },
+  "stremio-ambient-patches": {
+    "patches": "https://github.com/Qutaiba-Khader/stremio-ambient-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ytm-wrapped-patches": {
+    "patches": "https://github.com/Yog-io/ytm-wrapped-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "roboroads-morphe-patches": {
+    "patches": "https://github.com/Roboroads/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "disk": {
+    "patches": "https://github.com/uta-a/disk",
+    "integrations": false,
+    "disabled": false
+  },
+  "helakuru-morphe": {
+    "patches": "https://github.com/bhashanaliyanage/helakuru-morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-arcore-patches": {
+    "patches": "https://github.com/Hinatara/morphe-arcore-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "instagram-notification-nudges": {
+    "patches": "https://github.com/brandonp2412/instagram-notification-nudges",
+    "integrations": false,
+    "disabled": false
+  },
+  "d-moniakpatches-dev": {
+    "patches": "https://github.com/SatanMerde/D-moniakPatches-dev",
+    "integrations": false,
+    "disabled": false
+  },
+  "google-yourwidgets-patches-for-morphe": {
+    "patches": "https://github.com/nnuduck/Google-YourWidgets-Patches-for-Morphe",
+    "integrations": false,
+    "disabled": false
+  },
+  "avano-morphe-patches": {
+    "patches": "https://github.com/avano/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "cutlog": {
+    "patches": "https://github.com/uta-a/cutlog",
     "integrations": false,
     "disabled": false
   }
