@@ -2250,11 +2250,6 @@
     "integrations": false,
     "disabled": false
   },
-  "taobaolingo": {
-    "patches": "https://github.com/GoodLight999/TaobaoLingo",
-    "integrations": false,
-    "disabled": false
-  },
   "facebook-lite-morphe": {
     "patches": "https://github.com/BlazeFTL/FaceBook-Lite-Morphe",
     "integrations": false,
@@ -3587,6 +3582,51 @@
   },
   "cutlog": {
     "patches": "https://github.com/uta-a/cutlog",
+    "integrations": false,
+    "disabled": false
+  },
+  "relay-morphe-patches": {
+    "patches": "https://github.com/DrBushyTop/relay-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ayucord-patches": {
+    "patches": "https://github.com/aprelchan/ayucord-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "solo-patches": {
+    "patches": "https://gitlab.com/solo-patches/solo-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-ios-style-jp-en-morphe-patches": {
+    "patches": "https://github.com/twelvehouse/gboard-ios-style-jp-en-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "zeta-morphe-patches": {
+    "patches": "https://github.com/kubobeem2/zeta-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "archivetune-microg-patches": {
+    "patches": "https://github.com/timtkdb/archivetune-microg-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "soundsync": {
+    "patches": "https://github.com/Alcostrider/Soundsync",
+    "integrations": false,
+    "disabled": false
+  },
+  "longthree1-morphe-patches": {
+    "patches": "https://github.com/longthree1/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ironfox-md3-patches": {
+    "patches": "https://github.com/dorfandiysoftware-glitch/ironfox-md3-patches",
     "integrations": false,
     "disabled": false
   }
