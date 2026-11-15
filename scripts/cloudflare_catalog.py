@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import json
 import os
+import random
 import re
 import ssl
 import time
@@ -16,6 +17,7 @@ import httpx
 
 from scripts.catalog_reconciliation import reconcile_retained_records
 from scripts.catalog_records import catalog_records, encode, record_hash
+from scripts.cloudflare_http import error_details, query_error_details, retry_after
 from scripts.cloudflare_progress import Progress
 from scripts.cloudflare_storage import (
     REFRESH_FILES,
@@ -193,30 +195,42 @@ class Cloud:
                     raise RuntimeError(
                         "Cloudflare connection failed; verify any uncertain write before retrying"
                     ) from error
-                time.sleep(2**attempt)
+                time.sleep(2**attempt + random.uniform(0, 1))  # noqa: S311
                 continue
+            details = error_details(response) if not response.is_success else ""
             if response.status_code in (429, 500, 502, 503, 504):
                 if not safe and response.status_code != 429:
                     raise RuntimeError(
-                        "Cloudflare write outcome is uncertain; verify before retrying"
+                        "Cloudflare write outcome is uncertain; verify before retrying" + details
                     )
                 if attempt == 4:
                     break
-                header = response.headers.get("Retry-After", "").strip()
-                requested = float(header) if header.isascii() and header.isdigit() else 0.0
+                requested = retry_after(response.headers.get("Retry-After", ""))
                 if requested > 60:
                     raise RuntimeError(
                         "Cloudflare requested a cooldown longer than 60 seconds; retry later"
+                        + details
                     )
-                time.sleep(max(requested, 2**attempt))
+                delay = max(requested, 2**attempt + random.uniform(0, 1))  # noqa: S311
+                print(json.dumps({"cloudflare_retry": {
+                    "http_status": response.status_code, "attempt": attempt + 1,
+                    "delay_seconds": round(delay, 3), "details": details,
+                }}), flush=True)
+                time.sleep(delay)
                 continue
             if not response.is_success:
-                raise RuntimeError("Cloudflare API failed with HTTP " + str(response.status_code))
+                raise RuntimeError(
+                    "Cloudflare API failed with HTTP " + str(response.status_code) + details
+                )
             result = response.json()
             if not result.get("success"):
-                raise RuntimeError("Cloudflare API returned unsuccessful status")
+                raise RuntimeError(
+                    "Cloudflare API returned unsuccessful status" + error_details(response)
+                )
             return result["result"]
-        raise RuntimeError(f"Cloudflare API retries exhausted (HTTP {response.status_code})")
+        raise RuntimeError(
+            f"Cloudflare API retries exhausted (HTTP {response.status_code})" + details
+        )
 
     def sql(self, sql, params=()):
         self.transfers().add("d1_requests")
@@ -228,7 +242,7 @@ class Cloud:
             json={"sql": sql, "params": list(params)},
         )
         if not all(row.get("success") for row in result):
-            raise RuntimeError("D1 query failed")
+            raise RuntimeError("D1 query failed" + query_error_details(result))
         return result[0].get("results", [])
 
     def cleanup_records(self, statement, params=()):
@@ -656,7 +670,7 @@ class Cloud:
             )
         if existing and active and active["generation"] == generation:
             self.finish_source_purge(active_document)
-            self.prune("PRUNE", verify=False)
+            self.finish_publication(generation)
             print("Catalog unchanged; no D1 writes or repeated full verification")
             return
         if existing:
@@ -665,7 +679,7 @@ class Cloud:
             with self.phase("activate_generation"):
                 self.sql("UPDATE catalog_state SET active_seq=? WHERE id=1", [existing[0]["seq"]])
             self.finish_source_purge(self.document(existing[0]))
-            self.prune("PRUNE", verify=False)
+            self.finish_publication(generation)
             print("Reactivated verified existing generation")
             return
         if active and active["generation"] == generation:
@@ -818,8 +832,26 @@ class Cloud:
             self.sql("UPDATE catalog_state SET active_seq=? WHERE id=1", [seq])
         with self.phase("purge_removed_sources"):
             self.finish_source_purge(document)
-        self.prune("PRUNE", verify=False)
+        self.finish_publication(generation)
         print(json.dumps({"generation": generation, "records_changed": writes, "records": count}))
+
+    def finish_publication(self, generation):
+        self.publication_metrics = getattr(self, "publication_metrics", {})
+        outcome = {"generation": generation, "published": True, "retention": "pending"}
+        self.publication_metrics["publication_outcome"] = outcome
+        print(json.dumps({"cloudflare_publication": outcome}), flush=True)
+        try:
+            self.prune("PRUNE", verify=False)
+        except Exception as error:
+            outcome["retention"] = "failed"
+            print(json.dumps({"cloudflare_publication": outcome}), flush=True)
+            error.add_note(
+                "Catalog " + generation + " published successfully; retention cleanup failed. "
+                "Cleanup remains pending and will be retried on a later publication or prune."
+            )
+            raise
+        outcome["retention"] = "completed"
+        print(json.dumps({"cloudflare_publication": outcome}), flush=True)
 
     def finish_source_purge(self, document):
         if not document.get("source_purge_pending") and not (
@@ -1324,8 +1356,20 @@ def main():
         try:
             cloud.report(args.operation, started)
         except (OSError, ValueError) as error:
-            # Diagnostics and a disposable cache must not mask the operation's outcome.
             print("Could not save Cloudflare performance diagnostics: " + str(error), flush=True)
+        try:
+            outcome = getattr(cloud, "publication_metrics", {}).get("publication_outcome")
+            summary = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary and outcome:
+                with open(summary, "a", encoding="utf-8") as output:
+                    output.write(
+                        "Catalog generation `" + outcome["generation"]
+                        + "` published successfully.\n\n"
+                        "Retention cleanup: **" + outcome["retention"] + "**.\n"
+                    )
+        except (OSError, ValueError) as error:
+            # Diagnostics and a disposable cache must not mask the operation's outcome.
+            print("Could not save Cloudflare publication summary: " + str(error), flush=True)
 
 
 if __name__ == "__main__":

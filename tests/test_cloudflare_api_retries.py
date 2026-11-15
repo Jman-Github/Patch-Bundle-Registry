@@ -20,6 +20,7 @@ class Client:
 def cloud(monkeypatch, responses):
     obj = module.Cloud.__new__(module.Cloud)
     obj.http = Client(responses)
+    monkeypatch.setattr(module.random, "uniform", lambda low, high: 0)
     monkeypatch.setattr(module.time, "sleep", lambda seconds: None)
     return obj
 

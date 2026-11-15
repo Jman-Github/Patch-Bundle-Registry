@@ -211,6 +211,7 @@ def test_cleanup_retries_the_same_targets_after_an_uncertain_write(
         )
     ]
     calls, failures, delays = [], [], []
+    monkeypatch.setattr(cloud.random, "uniform", lambda low, high: 0)
     monkeypatch.setattr(cloud.time, "sleep", delays.append)
 
     def request(request):

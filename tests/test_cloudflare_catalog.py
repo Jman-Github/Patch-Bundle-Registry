@@ -312,6 +312,7 @@ def test_cloudflare_retries_accept_second_or_date_retry_after(monkeypatch):
     ]
     cloud_api.http = SimpleNamespace(request=lambda *args, **kwargs: replies.pop(0))
     delays = []
+    monkeypatch.setattr(cloud.random, "uniform", lambda low, high: 0)
     monkeypatch.setattr(cloud.time, "sleep", delays.append)
     assert cloud_api.api("GET", "/user") == ["ok"]
     assert delays == [7, 2, 4]
