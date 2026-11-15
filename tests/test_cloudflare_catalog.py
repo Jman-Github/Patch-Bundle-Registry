@@ -88,6 +88,9 @@ class MemoryCloud(cloud.Cloud):
         self.database.commit()
         return [dict(row) for row in cursor.fetchall()]
 
+    def cleanup_query(self, statement, params):
+        return self.sql(statement, params)
+
     def put(self, key, body):
         self.objects[key] = body
 

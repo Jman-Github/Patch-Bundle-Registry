@@ -17,7 +17,12 @@ import httpx
 
 from scripts.catalog_reconciliation import reconcile_retained_records
 from scripts.catalog_records import catalog_records, encode, record_hash
-from scripts.cloudflare_http import error_details, query_error_details, retry_after
+from scripts.cloudflare_http import (
+    error_details,
+    is_d1_overloaded,
+    query_error_details,
+    retry_after,
+)
 from scripts.cloudflare_progress import Progress
 from scripts.cloudflare_storage import (
     REFRESH_FILES,
@@ -37,6 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 D1_CLEANUP_BATCH_SIZE = 1000
 D1_CLEANUP_SCAN_SIZE = 10_000
 D1_WRITE_BATCH_SIZE = 1000
+D1_CLEANUP_INTERVAL_SECONDS = 1.0
 
 
 def merge_ids(*registries):
@@ -211,7 +217,11 @@ class Cloud:
                         "Cloudflare requested a cooldown longer than 60 seconds; retry later"
                         + details
                     )
-                delay = max(requested, 2**attempt + random.uniform(0, 1))  # noqa: S311
+                overloaded = path.startswith("/d1/database/") and is_d1_overloaded(response)
+                # 7429 describes a ten-second resource window. Give it a full
+                # window to recover rather than probing again after one second.
+                backoff = min(60, 11 * 2**attempt) if overloaded else 2**attempt
+                delay = max(requested, min(60, backoff + random.uniform(0, 1)))  # noqa: S311
                 print(json.dumps({"cloudflare_retry": {
                     "http_status": response.status_code, "attempt": attempt + 1,
                     "delay_seconds": round(delay, 3), "details": details,
@@ -245,6 +255,18 @@ class Cloud:
             raise RuntimeError("D1 query failed" + query_error_details(result))
         return result[0].get("results", [])
 
+    def cleanup_query(self, statement, params):
+        # Keep one pause between cleanup requests, across scan pages, mutation
+        # batches, and consecutive cleanup calls. Monotonic time ignores clock jumps.
+        delay = getattr(self, "_cleanup_not_before", 0.0) - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+        try:
+            return self.sql(statement, params)
+        finally:
+            # Failed requests consume resources too. Keep pacing on resumption.
+            self._cleanup_not_before = time.monotonic() + D1_CLEANUP_INTERVAL_SECONDS
+
     def cleanup_records(self, statement, params=()):
         # Evaluate the predicate in the projection so LIMIT bounds rows scanned,
         # even when no records match. Only matching rows need write requests.
@@ -254,7 +276,7 @@ class Cloud:
         completed = scanned = 0
         with Progress("d1_cleanup") as progress:
             while True:
-                rows = self.sql(
+                rows = self.cleanup_query(
                     "SELECT rowid, (" + predicate + ") AS matches FROM catalog_records"  # noqa: S608
                     + (" WHERE rowid>?" if cursor is not None else "")
                     + " ORDER BY rowid LIMIT ?",
@@ -266,7 +288,7 @@ class Cloud:
                 targets = [row["rowid"] for row in rows if row["matches"]]
                 for start in range(0, len(targets), D1_CLEANUP_BATCH_SIZE):
                     batch = targets[start : start + D1_CLEANUP_BATCH_SIZE]
-                    self.sql(
+                    self.cleanup_query(
                         statement + " AND rowid IN (SELECT value FROM json_each(?))",  # noqa: S608
                         [*params, encode(batch).decode()],
                     )

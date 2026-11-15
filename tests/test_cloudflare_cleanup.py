@@ -194,7 +194,7 @@ def test_cleanup_default_batch_size_stays_below_d1_binding_limit(memory, monkeyp
 
 
 @pytest.mark.parametrize("statement,params", CLEANUPS[:2])
-@pytest.mark.parametrize("failure", ["http-503", "read-timeout"])
+@pytest.mark.parametrize("failure", ["http-503", "http-7429", "read-timeout"])
 def test_cleanup_retries_the_same_targets_after_an_uncertain_write(
     memory, monkeypatch, statement, params, failure
 ):
@@ -224,11 +224,14 @@ def test_cleanup_retries_the_same_targets_after_an_uncertain_write(
             failures.append(len(calls) - 1)
             if failure == "read-timeout":
                 raise httpx.ReadTimeout("Write committed, response lost", request=request)
+            if failure == "http-7429":
+                return httpx.Response(429, json={"errors": [{"code": 7429}]})
             return httpx.Response(503)
         return httpx.Response(
             200, json={"success": True, "result": [{"success": True, "results": result}]}
         )
 
+    monkeypatch.setattr(cloud, "D1_CLEANUP_INTERVAL_SECONDS", 0)
     obj = cloud.Cloud.__new__(cloud.Cloud)
     obj.database = "offline"
     obj._transfers = memory.transfers()
@@ -247,7 +250,7 @@ def test_cleanup_retries_the_same_targets_after_an_uncertain_write(
     expected_pages = [page for page in pages for _ in range(2 if page == repeated else 1)]
     assert [json.loads(payload["params"][-1]) for payload in mutations] == expected_pages
     assert obj.transfers().metrics["d1_cleanup_batches"] == len(pages)
-    assert delays == [1]
+    assert delays == ([11] if failure == "http-7429" else [1])
 
 
 @pytest.mark.parametrize("phase", ["rows", "boundaries"])

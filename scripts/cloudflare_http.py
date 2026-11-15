@@ -86,3 +86,19 @@ def query_error_details(rows):
         if len(errors) >= 5:
             break
     return error_details(errors=errors[:5])
+
+
+def is_d1_overloaded(response):
+    """Recognize the structured D1 overload code, never message substrings."""
+    if response.status_code != 429:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    if not isinstance(payload, dict) or not isinstance(payload.get("errors"), list):
+        return False
+    return any(
+        isinstance(error, dict) and str(error.get("code")) == "7429"
+        for error in payload["errors"]
+    )
