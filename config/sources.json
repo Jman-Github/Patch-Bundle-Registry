@@ -2005,11 +2005,6 @@
     "integrations": false,
     "disabled": false
   },
-  "moon-patches": {
-    "patches": "https://github.com/noire342/moon-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "revanced-dual-subtitles": {
     "patches": "https://github.com/Daniil-Ka/revanced-dual-subtitles",
     "integrations": false,
@@ -3520,11 +3515,6 @@
     "integrations": false,
     "disabled": false
   },
-  "hxmst-morphe-patches": {
-    "patches": "https://github.com/hxmst/morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "extended-youtube-playlists": {
     "patches": "https://github.com/chocolavv/extended-youtube-playlists",
     "integrations": false,
@@ -3627,6 +3617,36 @@
   },
   "ironfox-md3-patches": {
     "patches": "https://github.com/dorfandiysoftware-glitch/ironfox-md3-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "shuffle-plus-spotify": {
+    "patches": "https://github.com/farbener/shuffle-plus-spotify",
+    "integrations": false,
+    "disabled": false
+  },
+  "kmaps-nav-patches": {
+    "patches": "https://github.com/ocel07/kmaps-nav-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "mika2-morphe-patches": {
+    "patches": "https://github.com/Razor573/mika2-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "jo-patches-github": {
+    "patches": "https://github.com/Jo-Patches/jo-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-movielab": {
+    "patches": "https://github.com/PerfLite/morphe-patches-MovieLab",
+    "integrations": false,
+    "disabled": false
+  },
+  "immich-media-patches": {
+    "patches": "https://github.com/anoraktrend/immich-media-patches",
     "integrations": false,
     "disabled": false
   }
