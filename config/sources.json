@@ -1090,11 +1090,6 @@
     "integrations": false,
     "disabled": false
   },
-  "diskwala": {
-    "patches": "https://github.com/kuntal-devrat/diskwala-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "iptv": {
     "patches": "https://github.com/Okazakee/iptv-morphe-patches",
     "integrations": false,
@@ -1317,11 +1312,6 @@
   },
   "mixplorer": {
     "patches": "https://github.com/ak800i/mixplorer-patches-for-morphe",
-    "integrations": false,
-    "disabled": false
-  },
-  "dowjames": {
-    "patches": "https://github.com/dowjames/morphe-patches",
     "integrations": false,
     "disabled": false
   },
@@ -3595,11 +3585,6 @@
     "integrations": false,
     "disabled": false
   },
-  "zeta-morphe-patches": {
-    "patches": "https://github.com/kubobeem2/zeta-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "archivetune-microg-patches": {
     "patches": "https://github.com/timtkdb/archivetune-microg-patches",
     "integrations": false,
@@ -3647,6 +3632,321 @@
   },
   "immich-media-patches": {
     "patches": "https://github.com/anoraktrend/immich-media-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "deconta-patches": {
+    "patches": "https://github.com/Deconta/deconta-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "deezer-morphe-patches": {
+    "patches": "https://github.com/AudioPatchLab/deezer-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revera-morphe-patches": {
+    "patches": "https://github.com/tomi38/revera-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patch-lunar-edge": {
+    "patches": "https://github.com/adriviciano/morphe-patch-lunar-edge",
+    "integrations": false,
+    "disabled": false
+  },
+  "alaeddinefaouzi-morphe-patches": {
+    "patches": "https://github.com/alaeddinefaouzi/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "de-waze-patches": {
+    "patches": "https://github.com/DutchPharaoh/De-Waze-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "deepseek-patches": {
+    "patches": "https://github.com/bicybert/deepseek-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "spolierblock": {
+    "patches": "https://github.com/RamazanBerk20/SpolierBlock",
+    "integrations": false,
+    "disabled": false
+  },
+  "sircoderin-morphe-patches": {
+    "patches": "https://github.com/sircoderin/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "tv-morphe-patches": {
+    "patches": "https://github.com/semicoloncolonel/tv-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ray1997-morphe-patches": {
+    "patches": "https://github.com/ray1997/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "0x11dfe-morphe-patches": {
+    "patches": "https://github.com/0x11DFE/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "force-tv-patches": {
+    "patches": "https://github.com/kabukabu-a11y/force-tv-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "window-shopper": {
+    "patches": "https://github.com/semi-column/window-shopper",
+    "integrations": false,
+    "disabled": false
+  },
+  "jaybyte-morphe-patches": {
+    "patches": "https://github.com/EagerGoose32/jaybyte-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "what-it-should-be": {
+    "patches": "https://github.com/Just-a0user/what-it-should-be",
+    "integrations": false,
+    "disabled": false
+  },
+  "awt-patches": {
+    "patches": "https://github.com/AWTMODS/AWT-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "pinspoof": {
+    "patches": "https://github.com/redcatxus/PinSpoof",
+    "integrations": false,
+    "disabled": false
+  },
+  "kim-launcher-patches": {
+    "patches": "https://github.com/kakazaro/kim-launcher-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "richees": {
+    "patches": "https://github.com/ClmentCch/Richees",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-rif-patches": {
+    "patches": "https://github.com/MojiRS/morphe-rif-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "nick-patches": {
+    "patches": "https://github.com/rathmerdominik/nick-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "nullroute3-morphe-patches": {
+    "patches": "https://github.com/nullroute3/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ben-thamizha-patches": {
+    "patches": "https://github.com/MuguDEV/ben-thamizha-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "letterboxd-patches": {
+    "patches": "https://github.com/Trvnce/letterboxd-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "waze-minimize-search-bar": {
+    "patches": "https://github.com/quangmach/waze-minimize-search-bar",
+    "integrations": false,
+    "disabled": false
+  },
+  "quackify-morphe-patches": {
+    "patches": "https://github.com/tomi38/quackify-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "audioserver-morphe-patches": {
+    "patches": "https://github.com/Noghpu/audioserver-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "preserveapplemusicfont": {
+    "patches": "https://github.com/unemployed-union/PreserveAppleMusicFont",
+    "integrations": false,
+    "disabled": false
+  },
+  "akkay-dev-morphe-patches": {
+    "patches": "https://github.com/akkay-dev/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "bens-morphe-patches": {
+    "patches": "https://github.com/xiliav/bens-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "reddit-user-insights": {
+    "patches": "https://github.com/DrTron1c/reddit-user-insights",
+    "integrations": false,
+    "disabled": false
+  },
+  "enescevikdogan-liquidmusic": {
+    "patches": "https://github.com/EnesCevikdogan/LiquidMusic",
+    "integrations": false,
+    "disabled": false
+  },
+  "dyno-patches": {
+    "patches": "https://github.com/Dyno0311/dyno-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "iloxmn-morphepatches": {
+    "patches": "https://github.com/iloxmn/MorphePatches",
+    "integrations": false,
+    "disabled": false
+  },
+  "arkert-patches": {
+    "patches": "https://github.com/Arkert/arkert-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "yanmus": {
+    "patches": "https://github.com/murikbmx/yanmus",
+    "integrations": false,
+    "disabled": false
+  },
+  "csp-android-12": {
+    "patches": "https://github.com/lenemter/csp-android-12",
+    "integrations": false,
+    "disabled": false
+  },
+  "nmax-patches": {
+    "patches": "https://github.com/lamphung-phuc/nmax-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "wear-patches": {
+    "patches": "https://github.com/ssch71/wear-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "hami-patches": {
+    "patches": "https://github.com/hkopenclaw/hami-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ungoogled-maps-local-enhancements": {
+    "patches": "https://github.com/selim-durmus/ungoogled-maps-local-enhancements",
+    "integrations": false,
+    "disabled": false
+  },
+  "graff-patches": {
+    "patches": "https://github.com/Finn013/graff-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "rimixyz-morphe-patches": {
+    "patches": "https://github.com/rimixyz/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "comoestaisamigos-morphe-patches": {
+    "patches": "https://github.com/ComoEstaisAmigos/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ak800i-morphe-patches": {
+    "patches": "https://github.com/ak800i/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morpheeeps": {
+    "patches": "https://github.com/TgSeed/Morpheeeps",
+    "integrations": false,
+    "disabled": false
+  },
+  "swiftkey-morphe-patches": {
+    "patches": "https://github.com/Kaysera/swiftkey-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "signal-patch": {
+    "patches": "https://github.com/MOD-PROD/signal-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "kicker-patches": {
+    "patches": "https://github.com/RebuildXoxo/kicker-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ytmusic-artist-filter-patches": {
+    "patches": "https://github.com/unknown-1214/ytmusic-artist-filter-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "moonreader-regional-patches": {
+    "patches": "https://github.com/salihefee/moonreader-regional-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "zank-remote-morphe-patches": {
+    "patches": "https://github.com/yogeshchavan-jd/zank-remote-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "projectivy-morphe-patch": {
+    "patches": "https://github.com/gggg-unit/projectivy-morphe-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "springfurst-morphe-patches": {
+    "patches": "https://github.com/springfurst/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "parche-facemoji": {
+    "patches": "https://github.com/Minecraco/Parche-facemoji",
+    "integrations": false,
+    "disabled": false
+  },
+  "manot40-morphe-patches": {
+    "patches": "https://github.com/manot40/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "channel-blocker-patches": {
+    "patches": "https://github.com/needfish/channel-blocker-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-androidtv-patches": {
+    "patches": "https://github.com/dzungtvd/morphe-androidtv-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "swiftkey-patch": {
+    "patches": "https://github.com/murilosimao/swiftkey-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "roborock-local-patches": {
+    "patches": "https://github.com/NicolasBonduel/roborock-local-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sdmaid-se-morphe-patch": {
+    "patches": "https://github.com/gggg-unit/sdmaid-se-morphe-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "nagol12344-patch": {
+    "patches": "https://github.com/Nagol12344/patch",
     "integrations": false,
     "disabled": false
   }
