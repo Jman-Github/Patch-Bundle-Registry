@@ -22,6 +22,31 @@ test("Website retries temporary manifest and snapshot failures without losing in
   } finally {globalThis.fetch=original;f.sqlite.close();}
 });
 
+test("Website startup can recover after the first three manifest requests fail", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fixture = d1Fixture();
+  const original = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push(String(url));
+    if (requests.length <= 3) return Response.json({ error: "Temporarily unavailable" }, { status: 503 });
+    return worker.fetch(new Request(url,options), fixture.env);
+  };
+  try {
+    const loading = new ApiCatalog("https://api.test").initialize();
+    for (const delay of [1250, 3250, 7250]) {
+      await new Promise(resolve => setImmediate(resolve));
+      t.mock.timers.tick(delay);
+    }
+    const catalog = await loading;
+    assert.equal(catalog.manifest.generation, fixture.old.manifest.generation);
+    assert.deepEqual(requests, Array(4).fill("https://api.test/catalog/data/manifest.json"));
+  } finally {
+    globalThis.fetch = original;
+    fixture.sqlite.close();
+  }
+});
+
 test("Website retries the same bundle and patch page once after a temporary failure", async()=>{
   const original=globalThis.fetch, calls=[];
   let bundleCalls=0, patchCalls=0;

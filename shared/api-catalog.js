@@ -1,25 +1,32 @@
 import { Catalog, CatalogError, pagination } from "./catalog.js";
 
-// Retry only temporary read failures, at the same URL and pagination cursor.
+// Allow the manifest read to span a short publication outage. Other reads
+// retain the tighter retry budget so parallel bundle pages do not pile up.
+const manifestRetryDelays = [1000, 3000, 7000];
+const pageRetryDelays = [200, 400];
+
 async function fetchCatalog(url, options) {
+  const isManifest = new URL(url).pathname === "/catalog/data/manifest.json";
+  const delays = isManifest ? manifestRetryDelays : pageRetryDelays;
+  const maxRetryAfter = isManifest ? 12000 : 5000;
   for (let attempt=0; ; attempt++) {
     let response;
     try { response=await fetch(url,options); }
     catch (error) {
-      if (attempt>=2 || !(error instanceof TypeError || error.name==="TimeoutError")) throw error;
+      if (attempt>=delays.length || !(error instanceof TypeError || error.name==="TimeoutError")) throw error;
     }
-    if (response && (![408,429,500,502,503,504].includes(response.status) || attempt>=2)) return response;
-    let delay=200*2**attempt;
+    if (response && (![408,429,500,502,503,504].includes(response.status) || attempt>=delays.length)) return response;
+    let delay=delays[attempt];
     const retryAfter=response?.headers.get("Retry-After");
     if (retryAfter) {
       const seconds=Number(retryAfter);
       const requested=Number.isFinite(seconds) ? seconds*1000 : Date.parse(retryAfter)-Date.now();
       // Do not retry earlier than a long server-requested cooldown.
-      if (requested>5000) return response;
+      if (requested>maxRetryAfter) return response;
       if (Number.isFinite(requested)) delay=Math.max(delay,requested);
     }
     await response?.body?.cancel().catch(()=>{});
-    await new Promise(resolve=>setTimeout(resolve,delay));
+    await new Promise(resolve=>setTimeout(resolve,delay+(isManifest ? Math.random()*250 : 0)));
   }
 }
 
