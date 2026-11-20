@@ -26,7 +26,7 @@ test("New tabs default to Latest while explicit selections and legacy types surv
 
 test("Touch holds show labels without performing an action, and normal taps copy", async t => {
     t.mock.timers.enable({apis:["setTimeout"]});
-    const classes = new Set(), attributes = new Map(), tip = {};
+    const classes = new Set(), attributes = new Map([["aria-label", "Copy package name"]]), tip = {};
     const action = Object.assign(new EventTarget(), {
         dataset:{copyText:"com.example.video",tooltip:"Copy package name"},
         classList:{add:x=>classes.add(x),remove:x=>classes.delete(x)},
@@ -57,6 +57,7 @@ test("Touch holds show labels without performing an action, and normal taps copy
     await new Promise(resolve=>setImmediate(resolve));
     assert.deepEqual(copied,["com.example.video"]);
     assert.equal(tip.textContent,"Copied!");
+    assert.equal(attributes.get("aria-label"),"Copy package name");
     t.mock.timers.tick(1800);
     assert.equal(attributes.get("aria-label"),"Copy package name");
     assert(!classes.has("tooltip-visible"));

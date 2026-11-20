@@ -24,7 +24,7 @@
     function restore() {
         const byId = id => document.getElementById(id);
         byId("search").value = text("search");
-        byId("search").placeholder = tab === "apps" ? "Search apps by name or package..." : "Search bundles by source URL or name...";
+        byId("search").placeholder = tab === "apps" ? "Search by app or package" : "Search bundles or patches";
         byId("search").setAttribute("aria-label", tab === "apps" ? "Search apps" : "Search bundles");
         byId("package-filter").value = text("package");
         for (const [id, value] of [["source-filter", text("source")], ["bundle-type-filter", text("type")],
@@ -39,8 +39,11 @@
         }
         byId("source-picker-value").textContent = text("source") || "All sources";
         byId("bundle-version-filter").disabled = !text("source");
-        document.querySelectorAll(".filter-btn").forEach(button =>
-            button.classList.toggle("active", button.dataset.filter === release));
+        document.querySelectorAll(".filter-btn").forEach(button => {
+            const selected = button.dataset.filter === release;
+            button.classList.toggle("active", selected);
+            button.setAttribute("aria-pressed", String(selected));
+        });
         document.querySelectorAll(".catalog-tab").forEach(button => {
             const selected = button.id === tab + "-tab";
             button.classList.toggle("active", selected);
@@ -51,11 +54,16 @@
         byId("results").classList.toggle("grid-view", grid);
         document.querySelector(".container").classList.toggle("grid-view-enabled", grid);
         byId("view-toggle").setAttribute("aria-pressed", String(grid));
-        byId("view-toggle").textContent = grid ? "List view" : "Grid view";
         byId("bundle-version-field").hidden = tab === "apps";
         document.querySelector(".filter-row").classList.toggle("apps-filters", tab === "apps");
         byId("apps-note").hidden = tab !== "apps";
         byId("status").textContent = tab === "apps" ? "Loading apps..." : "Loading bundles...";
+        byId("catalog-app").addEventListener?.("error", () => {
+            byId("status").textContent = "The catalog interface could not start.";
+            byId("catalog-stats").textContent = "Catalog statistics unavailable";
+            byId("catalog-retry").hidden = false;
+            byId("catalog-retry").addEventListener("click", () => location.reload());
+        });
         root.removeAttribute("data-browse-pending");
     }
     if (document.readyState === "loading")

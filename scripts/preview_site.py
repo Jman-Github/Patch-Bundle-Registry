@@ -57,9 +57,11 @@ def prepare_preview(root=ROOT, *, refresh_apps=False):
 def preview_handler(root, preview=None, *, live=False):
     root = Path(root)
     site_config = read_json(root / "config/site.json")
+    api_base = site_config.get("api", "https://patch-bundles.api.jmancentral.com").rstrip("/")
+    graphql_paths = ("/graphql", "/v1/graphql", "/hasura/v1/graphql")
 
     class Handler(BaseHTTPRequestHandler):
-        def proxy(self, target_url):
+        def proxy(self, target_url, data=None):
             req_headers = {
                 "User-Agent": self.headers.get("User-Agent")
                 or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Patch-Bundle-Preview/1.0"
@@ -68,7 +70,9 @@ def preview_handler(root, preview=None, *, live=False):
                 req_headers["If-None-Match"] = if_none_match
             if not target_url.startswith(("http://", "https://")):
                 raise ValueError("Only http and https schemes are permitted")
-            req = urllib.request.Request(target_url, headers=req_headers)  # noqa: S310
+            if data is not None:
+                req_headers["Content-Type"] = "application/json"
+            req = urllib.request.Request(target_url, data=data, headers=req_headers)  # noqa: S310
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                     body = resp.read()
@@ -114,26 +118,52 @@ def preview_handler(root, preview=None, *, live=False):
             self.send_header("Access-Control-Expose-Headers", "ETag, X-Catalog-Generation")
             self.end_headers()
 
+        def do_POST(self):
+            if urlsplit(self.path).path not in graphql_paths:
+                self.send_error(404)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                self.send_error(411)
+                return
+            if not 0 < length <= 2 * 1024 * 1024:
+                self.send_error(413)
+                return
+            self.proxy(api_base + self.path, self.rfile.read(length))
+
         def do_GET(self):
             name = unquote(urlsplit(self.path).path).lstrip("/")
             if name == "config.json":
                 config = dict(site_config)
+                host = self.headers.get("Host") or f"localhost:{self.server.server_port}"
+                config["explorer_api"] = f"http://{host}"
                 if not live and preview:
                     config["live_data"] = False
                     config.pop("catalog_backend", None)
                 else:
                     config["catalog_backend"] = "d1"
-                    host = self.headers.get("Host") or f"localhost:{self.server.server_port}"
-                    config["catalog_api"] = f"http://{host}"
+                    config["catalog_api"] = config["explorer_api"]
                 body, kind = encoded(config), "application/json"
-            elif (live or not preview) and (
-                name.startswith("catalog/")
-                or name.startswith("bundles/")
-                or name.startswith("api/")
+            elif (
+                name.split("/", 1)[0]
+                in {
+                    "api",
+                    "catalog",
+                    "bundles",
+                    "sources",
+                    "releases",
+                    "patches",
+                    "packages",
+                    "apps",
+                    "availability",
+                    "refresh-jobs",
+                    "health",
+                    "api.json",
+                    "openapi.json",
+                }
+                or "/" + name in graphql_paths
             ):
-                api_base = site_config.get(
-                    "api", "https://patch-bundles.api.jmancentral.com"
-                ).rstrip("/")
                 self.proxy(api_base + self.path)
                 return
             elif (live or not preview) and name.startswith("database/"):
@@ -150,7 +180,8 @@ def preview_handler(root, preview=None, *, live=False):
                 elif name == "config/git-hosts.json":
                     base, relative = root / "config", "git-hosts.json"
                 else:
-                    base, relative = root / "web", name or "index.html"
+                    base = root / "web"
+                    relative = name + "index.html" if not name or name.endswith("/") else name
                 path = (base / relative).resolve()
                 if not path.is_relative_to(base.resolve()) or not path.is_file():
                     self.send_error(404)

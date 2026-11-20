@@ -19,8 +19,13 @@ export function createSourcePicker({ button, select, onSelect, escapeHtml: escap
             dialog.setAttribute("aria-labelledby", "source-picker-title");
             document.body.appendChild(dialog);
             dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
+            const dismiss = event => { event.preventDefault(); dialog.close(); };
+            dialog.addEventListener("cancel", dismiss);
+            dialog.addEventListener("keydown", event => {
+                if (event.key === "Escape") dismiss(event);
+            });
             dialog.addEventListener("close", () => {
-                document.documentElement.classList.remove("details-open");
+                if (dialog.open) return;
                 button.setAttribute("aria-expanded", "false");
                 if (previousFocus?.isConnected) previousFocus.focus({preventScroll:true});
             });
@@ -32,24 +37,27 @@ export function createSourcePicker({ button, select, onSelect, escapeHtml: escap
         const search = dialog.querySelector(".details-search"), body = dialog.querySelector(".source-options");
         function render() {
             const options = matchingSources([...select.options], search.value);
+            const focused = body.contains?.(document.activeElement) ? document.activeElement.dataset.source : undefined;
             body.innerHTML = options.map(option =>
                 `<button type="button" class="source-option" data-source="${escape(option.value)}" aria-pressed="${option.value === select.value}">
                     <strong>${escape(option.label)}</strong>${option.value ? `<span>${escape(option.value)}</span>` : ""}</button>`).join("");
             const count = options.filter(option => option.value).length;
             dialog.querySelector(".details-count").textContent = count + (count === 1 ? " source" : " sources");
-            body.querySelectorAll("[data-source]").forEach(option => option.addEventListener("click", () => {
-                select.value = option.dataset.source;
-                sync();
-                dialog.close();
-                void onSelect(select.value);
-            }));
+            body.querySelectorAll("[data-source]").forEach(option => {
+                if (option.dataset.source === focused) option.focus({ preventScroll: true });
+                option.addEventListener("click", () => {
+                    select.value = option.dataset.source;
+                    dialog.close();
+                    sync();
+                    void onSelect(select.value);
+                });
+            });
         }
         refresh = render;
         search.addEventListener("input", render);
         dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
         render();
         button.setAttribute("aria-expanded", "true");
-        document.documentElement.classList.add("details-open");
         dialog.showModal();
         search.focus();
     }

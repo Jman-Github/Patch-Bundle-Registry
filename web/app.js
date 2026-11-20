@@ -23,8 +23,6 @@ import {
     windowScroll
 } from "https://esm.sh/@tanstack/virtual-core@3.17.8?bundle";
 
-/* global DOMPurify, marked */
-
 const input = document.getElementById("search");
 const packageFilter = document.getElementById("package-filter");
 const sourceFilter = document.getElementById("source-filter");
@@ -32,18 +30,13 @@ const bundleVersionFilter = document.getElementById("bundle-version-filter");
 const bundleTypeFilter = document.getElementById("bundle-type-filter");
 const results = document.getElementById("results");
 const status = document.getElementById("status");
+const retry = document.getElementById("catalog-retry");
+const resetFilters = document.getElementById("reset-filters");
+const statsPanel = document.getElementById("catalog-stats");
 const viewToggle = document.getElementById("view-toggle");
 const container = document.querySelector(".container");
 const filterButtons = document.querySelectorAll(".filter-btn");
 const adminAccess = document.getElementById("admin-access");
-
-// Keep the denser list layout as the mobile default; desktop starts in grid view.
-if (matchMedia("(max-width: 700px)").matches) {
-    results.classList.remove("grid-view");
-    container.classList.remove("grid-view-enabled");
-    viewToggle.setAttribute("aria-pressed", "false");
-    viewToggle.textContent = "Grid view";
-}
 
 // Virtualized list: TanStack Virtual renders only the visible rows of cards. Row
 // heights are measured from the DOM and a single spacer keeps the document scroll
@@ -56,7 +49,6 @@ const renderCache = new Map();
 // Preserve open previews and their scroll position as virtualized cards reappear.
 const changelogViews = new Map();
 const RENDER_CACHE_LIMIT = 500;
-marked.setOptions({ breaks: true, gfm: true });
 
 function cachedMarkdown(bundleId, key, markdown) {
     const cacheKey = `${bundleId}:${key}`;
@@ -70,11 +62,12 @@ function cachedMarkdown(bundleId, key, markdown) {
 }
 
 const track = document.getElementById("v-track");
+const browseControls = document.querySelector(".browse-controls");
 let filteredBundles = [];
 let virtualizer = null;
 let rowData = [];
 let lastColumns = 1;
-let lastVisibleFp = "";
+const renderedRows = new Map();
 
 function layoutColumns() {
     if (!results.classList.contains("grid-view")) return 1;
@@ -100,38 +93,49 @@ function renderVisible() {
     if (!virtualizer || rowData.length === 0) return;
 
     const items = virtualizer.getVirtualItems();
-    const fp = items.map(v => `${v.index}:${Math.round(v.start)}`).join(",");
-    if (fp === lastVisibleFp) {
-        track.style.height = `${virtualizer.getTotalSize()}px`;
-        return;
-    }
-    lastVisibleFp = fp;
-
+    const visible = new Set(items.map(item => item.index));
     track.style.height = `${virtualizer.getTotalSize()}px`;
-    const fragment = document.createDocumentFragment();
-    const columns = layoutColumns();
-    for (const item of items) {
-        const rowEl = document.createElement("div");
-        rowEl.className = "virtual-row";
-        rowEl.dataset.index = String(item.index);
-        rowEl.style.transform = `translateY(${item.start - virtualizer.options.scrollMargin}px)`;
-        rowEl.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-        for (const card of rowData[item.index]) {
-            if (currentTab === "apps") renderApp(card, rowEl);
-            else renderBundle(card, rowEl);
-        }
-        fragment.appendChild(rowEl);
+    for (const [index, row] of renderedRows) {
+        if (visible.has(index) || row.contains(document.activeElement) || row.querySelector(".card-selected"))
+            continue;
+        row.remove();
+        renderedRows.delete(index);
     }
-    track.replaceChildren(fragment);
+
+    // Keep mounted rows in document order so measuring a neighbor preserves
+    // keyboard focus, open controls and scroll position inside a card.
+    let next = track.firstElementChild;
+    const added = [];
+    for (const { index, start } of items) {
+        while (next && Number(next.dataset.index) < index) next = next.nextElementSibling;
+        let row = renderedRows.get(index);
+        if (!row) {
+            row = document.createElement("div");
+            row.className = "virtual-row";
+            row.dataset.index = String(index);
+            row.style.gridTemplateColumns = `repeat(${lastColumns}, minmax(0, 1fr))`;
+            for (const card of rowData[index]) {
+                if (currentTab === "apps") renderApp(card, row);
+                else renderBundle(card, row);
+            }
+            renderedRows.set(index, row);
+            track.insertBefore(row, next);
+            added.push(row);
+        }
+        row.style.transform = `translateY(${start - virtualizer.options.scrollMargin}px)`;
+        next = row.nextElementSibling;
+    }
     virtualizer.measureElement(null);
-    for (const rowEl of track.children) virtualizer.measureElement(rowEl);
+    for (const row of added) {
+        if (row.isConnected) virtualizer.measureElement(row);
+    }
 }
 
 function clearVirtualizer() {
     if (virtualizer) virtualizer.cleanup();
     virtualizer = null;
     rowData = [];
-    lastVisibleFp = "";
+    renderedRows.clear();
     track.replaceChildren();
     track.style.height = "0px";
 }
@@ -150,6 +154,8 @@ function setupVirtualizer(anchorBundleIndex = null) {
     rowData = buildRows();
     lastColumns = layoutColumns();
     if (virtualizer) virtualizer.cleanup();
+    renderedRows.clear();
+    track.replaceChildren();
     virtualizer = new Virtualizer({
         count: rowData.length,
         getScrollElement: () => window,
@@ -167,7 +173,6 @@ function setupVirtualizer(anchorBundleIndex = null) {
     // The vanilla core does not attach its scroll/resize observers until
     // _willUpdate is invoked; without it no viewport rows ever render.
     virtualizer._willUpdate();
-    lastVisibleFp = "";
     renderVisible();
     if (anchorBundleIndex !== null && rowData.length > 0) {
         virtualizer.scrollToIndex(
@@ -192,7 +197,6 @@ let currentSearchQuery = "";
 let currentPackageFilter = "";
 let currentSourceUrl = "";
 let currentBundleVersion = "";
-let bundleSelection = 0;
 let sourceSelection = 0;
 let currentBundleType = "";
 let latestBundles = [];
@@ -236,6 +240,22 @@ function writeNavigation(changes = {}, { replace = false, userAction = false } =
     // normalize default filters/layout while recovering a new catalog.
     if (changed && userAction) navigationRevision++;
 }
+async function recoverRoute(error, sequence, route) {
+    if (sequence !== navigationRevision) return true;
+    const recovered = await recoverGeneration(error);
+    if (sequence !== navigationRevision) return true;
+    if (recovered) await restoreNavigation(navigation.read() ?? route);
+    return recovered;
+}
+
+function mergeBundles(current, additional) {
+    return [...new Map([...current, ...additional].map(bundle => [bundle.id, bundle])).values()];
+}
+
+function showHistoryWarning(retry) {
+    status.textContent += " · Older versions could not be loaded. " + retry;
+}
+
 async function restoreNavigation(route) {
     const sequence = ++navigationRevision;
     detailsBrowser.close({ notify: false });
@@ -247,16 +267,23 @@ async function restoreNavigation(route) {
     if (!catalog) return;
     try {
         const sources = new Set([route.browse.source, route.detail?.source].filter(Boolean));
+        let historyUnavailable = false;
         for (const source of sources) {
             if (!catalog.historyBundles) continue;
-            const history = await catalog.historyBundles(source);
-            if (sequence !== navigationRevision) return;
-            summaries = [...new Map([...summaries, ...history].map(bundle => [bundle.id, bundle])).values()];
+            try {
+                const history = await catalog.historyBundles(source);
+                if (sequence !== navigationRevision) return;
+                summaries = mergeBundles(summaries, history);
+            } catch (error) {
+                if (await recoverRoute(error, sequence, route)) return;
+                historyUnavailable = true;
+            }
         }
         if (sequence !== navigationRevision) return;
         restoreBrowsePreferences();
         await renderFilteredBundles({ updateUrl: false });
         if (sequence !== navigationRevision) return;
+        if (historyUnavailable) showHistoryWarning("Reload this link to retry.");
         const detail = route.detail;
         if (detail?.kind === "app") {
             const app = applications.find(app => app.package_name === detail.package);
@@ -281,18 +308,19 @@ async function restoreNavigation(route) {
             await detailsBrowser.openBundle(transformBundle(bundle), { section: detail.section, notify: false });
         }
     } catch (error) {
-        if (sequence !== navigationRevision) return;
-        if (await recoverGeneration(error)) {
-            // Catalog recovery rebuilds the browse view; finish opening the
-            // requested detail unless the user has since navigated elsewhere.
-            if (sequence === navigationRevision) await restoreNavigation(navigation.read() ?? route);
-            return;
-        }
-        if (sequence === navigationRevision) status.textContent = "Unable to open shared link: " + error.message;
+        if (await recoverRoute(error, sequence, route)) return;
+        status.textContent = "Unable to open shared link: " + error.message;
     }
 }
+function updateReleaseControls() {
+    for (const button of filterButtons) {
+        const selected = button.dataset.filter === currentFilter;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+    }
+}
+
 function restoreBrowsePreferences() {
-    bundleSelection++;
     sourceSelection++;
     const saved = browsePreferences.read(currentTab);
     input.value = saved.search;
@@ -303,11 +331,10 @@ function restoreBrowsePreferences() {
     currentBundleVersion = saved.version;
     currentBundleType = saved.type;
     currentFilter = saved.release;
-    filterButtons.forEach(button => button.classList.toggle("active", button.dataset.filter === currentFilter));
+    updateReleaseControls();
     results.classList.toggle("grid-view", saved.grid);
     container.classList.toggle("grid-view-enabled", saved.grid);
     viewToggle.setAttribute("aria-pressed", String(saved.grid));
-    viewToggle.textContent = saved.grid ? "List view" : "Grid view";
     sourceVersions = summaries.filter(bundle => bundle.source.url === currentSourceUrl).sort(compareReleaseDates);
     if (catalog) {
         reconcileSourceSelection();
@@ -343,14 +370,17 @@ function selectTab(tab, { render = true, initial = false, updateUrl = true } = {
     document.getElementById("bundle-version-field").hidden = tab === "apps";
     document.querySelector(".filter-row").classList.toggle("apps-filters", tab === "apps");
     document.getElementById("apps-note").hidden = tab !== "apps";
-    input.placeholder = tab === "apps" ? "Search apps by name or package..." : "Search bundles by source URL or name...";
+    input.placeholder = tab === "apps" ? "Search by app or package" : "Search bundles or patches";
     input.setAttribute("aria-label", tab === "apps" ? "Search apps" : "Search bundles");
     clearVirtualizer();
     if (updateUrl && !initial) writeNavigation({ detail: null }, { userAction: true });
     if (render) void renderFilteredBundles();
 }
 catalogTabs.forEach((button, index) => {
-    button.addEventListener("click", () => selectTab(button.id === "apps-tab" ? "apps" : "bundles"));
+    button.addEventListener("click", () => {
+        const tab = button.id === "apps-tab" ? "apps" : "bundles";
+        if (tab !== currentTab) selectTab(tab);
+    });
     button.addEventListener("keydown", event => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
@@ -387,9 +417,8 @@ bundleTypeFilter.addEventListener("change", () => {
 
 filterButtons.forEach(btn => {
     btn.addEventListener("click", () => {
-        filterButtons.forEach(button => button.classList.remove("active"));
-        btn.classList.add("active");
         currentFilter = btn.dataset.filter;
+        updateReleaseControls();
         resetBundleSelection();
         populateVersionOptions();
         renderFilteredBundles({ userAction: true });
@@ -401,7 +430,6 @@ viewToggle.addEventListener("click", () => {
     const gridEnabled = results.classList.toggle("grid-view");
     container.classList.toggle("grid-view-enabled", gridEnabled);
     viewToggle.setAttribute("aria-pressed", String(gridEnabled));
-    viewToggle.textContent = gridEnabled ? "List view" : "Grid view";
     saveBrowsePreferences({ userAction: true });
     // Rebuild the row grouping while keeping the first visible bundle anchored.
     setupVirtualizer(anchorBundleIndex);
@@ -410,8 +438,16 @@ viewToggle.addEventListener("click", () => {
 
 addEventListener("resize", () => {
     const columns = layoutColumns();
-    if (columns !== lastColumns) setupVirtualizer(currentAnchorBundleIndex());
+    if (virtualizer && columns !== lastColumns) setupVirtualizer(currentAnchorBundleIndex());
 });
+
+new ResizeObserver(() => {
+    if (!virtualizer) return;
+    const scrollMargin = track.getBoundingClientRect().top + window.scrollY;
+    if (scrollMargin === virtualizer.options.scrollMargin) return;
+    virtualizer.setOptions({ ...virtualizer.options, scrollMargin });
+    renderVisible();
+}).observe(browseControls);
 
 async function openCatalog() {
     if (siteConfig.catalog_backend === "d1") return new ApiCatalog(siteConfig.catalog_api || siteConfig.api).initialize();
@@ -423,17 +459,43 @@ async function openCatalog() {
     throw failure;
 }
 
+retry.addEventListener("click", async () => {
+    const loaded = await loadBundles();
+    if (document.activeElement === document.body) (loaded ? input : retry).focus();
+});
+
+resetFilters.addEventListener("click", () => {
+    browsePreferences.save(currentTab, { grid: results.classList.contains("grid-view") });
+    restoreBrowsePreferences();
+    input.focus();
+    void renderFilteredBundles({ userAction: true });
+});
+
 async function loadBundles(refreshedCatalog = null) {
-    status.textContent = "Loading bundles...";
-    status.classList.add("loading");
+    if (!refreshedCatalog) {
+        retry.hidden = true;
+        status.textContent = currentTab === "apps" ? "Loading apps..." : "Loading bundles...";
+        if (!catalog) statsPanel.textContent = "Loading catalog statistics...";
+    }
     try {
-        siteConfig = await (await fetch("./config.json")).json();
+        const configuration = await fetch("./config.json");
+        if (!configuration.ok) throw new Error("Site configuration unavailable");
+        siteConfig = await configuration.json();
         const nextCatalog = refreshedCatalog ||
             await openCatalog();
-        const sources = ["bundles", "apps"].map(tab => browsePreferences.read(tab).source).filter(Boolean);
-        const [nextSummaries,nextApplications] = await Promise.all([
-            nextCatalog.bundles({ sources }), nextCatalog.apps()
+        const sources = [...new Set(["bundles", "apps"].map(tab => browsePreferences.read(tab).source).filter(Boolean))];
+        const [latest, nextApplications] = await Promise.all([
+            nextCatalog.bundles(), nextCatalog.apps()
         ]);
+        let nextSummaries = latest;
+        const missingHistory = new Set();
+        if (nextCatalog.historyBundles) {
+            const histories = await Promise.allSettled(sources.map(source => nextCatalog.historyBundles(source)));
+            histories.forEach((history, index) => {
+                if (history.status === "fulfilled") nextSummaries = mergeBundles(nextSummaries, history.value);
+                else missingHistory.add(sources[index]);
+            });
+        }
         applications = nextApplications;
         catalog = nextCatalog;
         scheduleCatalogRefresh();
@@ -448,6 +510,7 @@ async function loadBundles(refreshedCatalog = null) {
         populateSourceOptions();
         restoreBrowsePreferences();
         await renderFilteredBundles({ resetScroll: !refreshedCatalog });
+        if (missingHistory.has(currentSourceUrl)) showHistoryWarning("Select the source again to retry.");
         if (!navigationReady) {
             navigationReady = true;
             const route = navigation.read();
@@ -457,9 +520,13 @@ async function loadBundles(refreshedCatalog = null) {
         return true;
     } catch (error) {
         console.error(error);
-        status.textContent = "Failed to load catalog: " + error.message;
+        if (!refreshedCatalog) {
+            if (!catalog) statsPanel.textContent = "Catalog statistics unavailable";
+            status.textContent = "Unable to load the catalog. Please try again.";
+            retry.hidden = false;
+        }
         return false;
-    } finally { status.classList.remove("loading"); }
+    }
 }
 
 let catalogRefreshTimer;
@@ -500,20 +567,21 @@ async function selectSource(sourceUrl) {
     sourceFilter.value = sourceUrl;
     sourcePicker.sync();
     currentSourceUrl = sourceUrl;
+    setVersionControlsEnabled(false);
+
     saveBrowsePreferences({ userAction: true });
+    let historyUnavailable = false;
     if (sourceUrl && catalog?.historyBundles) {
+        status.textContent = "Loading source versions...";
         try {
             const history = await catalog.historyBundles(sourceUrl);
             if (selection !== sourceSelection) return;
-            const merged = new Map(summaries.map(bundle => [bundle.id, bundle]));
-            for (const bundle of history) merged.set(bundle.id, bundle);
-            summaries = [...merged.values()];
+            summaries = mergeBundles(summaries, history);
         } catch (error) {
             if (selection !== sourceSelection) return;
             if (await recoverGeneration(error)) return;
             if (selection !== sourceSelection) return;
-            status.textContent = "History unavailable: " + error.message;
-            return;
+            historyUnavailable = true;
         }
     }
     sourceVersions = summaries.filter(bundle => bundle.source.url === sourceUrl)
@@ -523,26 +591,12 @@ async function selectSource(sourceUrl) {
     populateBundleTypeOptions();
     populateVersionOptions();
     await renderFilteredBundles();
+    if (historyUnavailable && selection === sourceSelection) {
+        showHistoryWarning("Select the source again to retry.");
+    }
 }
 
 async function selectBundleVersion(version) {
-    navigationRevision++;
-    const selection = ++bundleSelection;
-    if (version && catalog?.historyBundles) {
-        try {
-            for (const bundle of sourceVersions.filter(bundle => bundle.version === version)) {
-                const detail = await catalog.file("bundles/" + bundle.id + ".json");
-                if (selection !== bundleSelection) return;
-                bundle.description = detail.description;
-            }
-        } catch (error) {
-            if (selection !== bundleSelection) return;
-            if (await recoverGeneration(error)) return;
-            if (selection !== bundleSelection) return;
-            status.textContent = "Changelog unavailable: " + error.message;
-            return;
-        }
-    }
     currentBundleVersion = version;
     allBundles = version
         ? sourceVersions.filter(bundle => bundle.version === version).map(transformBundle) : latestBundles;
@@ -578,7 +632,7 @@ async function bundlePatches(bundle) {
         bundle.loadedPatches = patches;
         return patches;
     } catch (error) {
-        cache.delete(key);
+        if (cache.get(key) === loadPromise) cache.delete(key);
         throw error;
     }
 }
@@ -679,7 +733,6 @@ function setVersionControlsEnabled(enabled) {
 }
 
 function resetBundleSelection() {
-    bundleSelection++;
     currentBundleVersion = "";
     bundleVersionFilter.value = "";
     allBundles = latestBundles;
@@ -726,8 +779,15 @@ function transformBundle(bundle) {
     };
 }
 
+function resetResultsScroll() {
+    const top = status.getBoundingClientRect().top;
+    if (top < 0) window.scrollBy(0, top);
+}
+
 async function renderFilteredBundles({ resetScroll = true, updateUrl = true, userAction = false } = {}) {
     saveBrowsePreferences({ updateUrl, userAction });
+    if (!catalog) return;
+    resetFilters.hidden = true;
     const sequence = ++searchSequence;
     if (currentTab === "apps") {
         try { renderFilteredApps(resetScroll); }
@@ -745,7 +805,8 @@ async function renderFilteredBundles({ resetScroll = true, updateUrl = true, use
         try {
             const candidates = allBundles.filter(bundle =>
                 (!currentSourceUrl || bundle.sourceUrl === currentSourceUrl) &&
-                (!currentBundleType || bundle.bundleType === currentBundleType));
+                (!currentBundleType || bundle.bundleType === currentBundleType) &&
+                matchesReleaseFilter(bundle, currentFilter));
             const reseamBundles = candidates.filter(bundle => bundle.bundleType === "Reseam");
             const alias = !packageQuery && reseamBundles.length ? reseamInternalSearchAlias(search) : null;
             const queries = [{ q: packageQuery ? "" : search, ids: candidates.map(b => b.id), alias: false }];
@@ -755,6 +816,7 @@ async function renderFilteredBundles({ resetScroll = true, updateUrl = true, use
             for (const request of queries) {
                 // A different matching patch must not hide an internal Reseam
                 // result whose readable name is absent from the search index.
+                if (!request.ids.length) continue;
                 let cursor = 0;
                 do {
                     const page = await catalog.patchRows({ q: request.q, bundle_ids: request.ids,
@@ -798,17 +860,22 @@ async function renderFilteredBundles({ resetScroll = true, updateUrl = true, use
         { ...bundle, patches: patchMatches.get(bundle.id), filteredPatches: true } : bundle);
     if (!filteredBundles.length) {
         clearVirtualizer();
-        status.textContent = "No bundles found for the selected filters";
+        status.textContent = "No bundles match the selected filters.";
+        resetFilters.hidden = false;
         return;
     }
-    if (resetScroll) document.scrollingElement.scrollTop = 0;
+    if (resetScroll) resetResultsScroll();
     if (!resetScroll && virtualizer && lastColumns === layoutColumns() &&
         previousBundles.length === filteredBundles.length &&
         previousBundles.every((bundle, index) => bundle.id === filteredBundles[index].id)) {
         // Progress-only snapshots keep the same rows. Retain their measurements
         // so refreshing card contents does not move the reader to another row.
         rowData = buildRows();
-        lastVisibleFp = "";
+        for (const [index, row] of renderedRows) {
+            if (row.contains(document.activeElement) || row.querySelector(".card-selected")) continue;
+            row.remove();
+            renderedRows.delete(index);
+        }
         renderVisible();
     } else setupVirtualizer();
     updateStatus();
@@ -824,10 +891,11 @@ function renderFilteredApps(resetScroll) {
     });
     if (!filteredBundles.length) {
         clearVirtualizer();
-        status.textContent = "No apps found for the selected filters";
+        status.textContent = "No apps match the selected filters.";
+        resetFilters.hidden = false;
         return;
     }
-    if (resetScroll) document.scrollingElement.scrollTop = 0;
+    if (resetScroll) resetResultsScroll();
     setupVirtualizer();
     updateStatus();
 }
@@ -849,24 +917,23 @@ function renderApp(app, target) {
             '<p class="metadata-note">Compatibility details are not available in this catalog yet.</p>' :
             app.bundles.some(reference => reference.metadata_status !== "verified") ?
             '<div class="v3-warning">Some bundle compatibility metadata is unverified.</div>' : ""}
+        <button class="card-toggle card-details" type="button" aria-haspopup="dialog" aria-label="View bundles for ${escapeHtml(app.app_name)}">View bundles</button>
 `;
     target.appendChild(card);
     installAvatarFallback(card, app.app_name);
     detailsBrowser.activateCard(card, () => detailsBrowser.openApp(app));
-
 }
 
 function renderStats() {
-    const target = document.getElementById("catalog-stats");
-    if (!target) return;
+    const target = statsPanel;
     const historical = historicalCatalogStats(summaries, catalog?.manifest);
     const stats = catalogStats(summaries);
 
     if (!target.querySelector(".stat-banner")) {
         const banner = `<div class="stat-card stat-banner">
             <div class="stat-banner-content">
-                <h2>All historical & latest releases across all runtimes</h2>
-                <p class="stat-banner-subtitle">Comprehensive catalog volume across every historical version and latest release across all patcher ecosystems</p>
+                <h2>All releases</h2>
+                <p class="stat-banner-subtitle">Across all versions and runtimes</p>
             </div>
             <dl class="stat-banner-metrics">
                 <div class="stat-metric">
@@ -895,7 +962,11 @@ function renderStats() {
                 </dl>
             </div>`;
         }).join("");
-        target.innerHTML = banner + cards;
+        target.innerHTML = banner + `<details class="runtime-statistics" ${matchMedia("(min-width: 701px)").matches ? "open" : ""}>
+            <summary>Latest release totals</summary>
+            <div class="runtime-stats-grid">${cards}</div>
+            <p class="stats-note">Newest release per source, including prereleases. Patch totals use available metadata.</p>
+        </details>`;
     }
 
     animateStatNumber(target.querySelector('[data-stat="historical-bundles"]'), historical.bundles);
@@ -911,7 +982,6 @@ function animateStatNumber(element, targetValue, duration = 1200) {
     if (!element) return;
     const target = Math.max(0, Number(targetValue) || 0);
     const start = element._currentValue !== undefined ? element._currentValue : 0;
-    element._statValue = target;
 
     if (element._animationFrame) {
         cancelAnimationFrame(element._animationFrame);
@@ -989,13 +1059,15 @@ function renderBundle(bundle, target) {
 
     const { tracked: trackedName } = repositoryNames(bundle);
     const repoLinkText = escapeHtml(trackedName);
+    const stars = bundle.repoStars == null ? null : bundle.repoStars.toLocaleString();
 
     const copyLabel = currentBundleVersion || bundle.pinVersion ? "Copy this version URL" : "Copy remote bundle URL";
     const pinImport = Boolean(currentBundleVersion) || bundle.pinVersion;
     const registryUrl = new URL(bundleImportPath(bundle, pinImport), siteConfig.api).href;
+    const showChangelog = Boolean(bundle.description || currentBundleVersion);
     card.innerHTML = `
         <div class="bundle-actions" aria-label="Bundle actions">
-            ${iconAction("download", "Download bundle", escapeHtml, {href: bundle.downloadUrl})}
+            ${bundle.downloadUrl ? iconAction("download", "Download bundle", escapeHtml, {href: bundle.downloadUrl}) : ""}
             ${bundle.signatureDownloadUrl ? iconAction("signature", "Download signature", escapeHtml, {href: bundle.signatureDownloadUrl}) : ""}
             ${bundle.bundleType === "Reseam"
                 ? importFormatAction(escapeHtml, registryUrl,
@@ -1019,8 +1091,8 @@ function renderBundle(bundle, target) {
                     <a href="${escapeHtml(bundle.sourceUrl)}" target="_blank" rel="noopener" class="repo-name">
                         ${repoLinkText}
                     </a>
-                    <span class="repo-popularity"><span aria-hidden="true">•</span>
-                    <span class="stars">${(bundle.repoStars == null ? "—" : bundle.repoStars.toLocaleString())}</span></span>
+                    ${stars == null ? "" : `<span class="repo-popularity" title="${stars} stars">
+                        <span aria-hidden="true">★</span>${stars}<span class="visually-hidden"> stars</span></span>`}
                 </div>
                 ${bundle.repoDescription ? `<div class="bundle-description">${cachedMarkdown(bundle.id, 'desc', bundle.repoDescription)}</div>` : ''}
                 <div class="bundle-version">
@@ -1037,12 +1109,12 @@ function renderBundle(bundle, target) {
         </div>
 
         <p class="card-hint">${bundle.hasPatches ? countLabel(bundle.patchCount ?? 0, "patch", "patches") : "Patch metadata unavailable"} · ${countLabel(bundle.appCount ?? 0, "app")}</p>
-        ${bundle.description ? `
-            <div class="card-toggles">
-                <button class="card-toggle" type="button" data-toggle-changelog aria-expanded="false"
-                    aria-controls="changelog-${escapeHtml(bundle.id)}">Show changelog</button>
-            </div>
-            <div class="changelog-preview" id="changelog-${escapeHtml(bundle.id)}" hidden>
+        <div class="card-toggles">
+            <button class="card-toggle card-details" type="button" aria-haspopup="dialog" aria-label="View patches for ${repoLinkText} ${escapeHtml(bundle.version)}">View patches</button>
+            ${showChangelog ? `<button class="card-toggle" type="button" data-toggle-changelog aria-expanded="false"
+                    aria-controls="changelog-${escapeHtml(bundle.id)}">Show changelog</button>` : ""}
+        </div>
+        ${showChangelog ? `<div class="changelog-preview" id="changelog-${escapeHtml(bundle.id)}" hidden>
                 <div class="changelog-content" data-changelog-preview tabindex="0"
                     role="region" aria-label="Changelog preview for ${repoLinkText}"></div>
                 <div class="changelog-preview-actions">
@@ -1181,8 +1253,10 @@ function escapeHtml(text) {
 }
 
 function renderMarkdown(text) {
-    if (!text) return '';
-    return DOMPurify.sanitize(marked.parse(text));
+    if (!text) return "";
+    if (!globalThis.marked?.parse || !globalThis.DOMPurify?.sanitize)
+        return escapeHtml(text).replace(/\r?\n/g, "<br>");
+    return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }));
 }
 
 function formatDate(dateString) {

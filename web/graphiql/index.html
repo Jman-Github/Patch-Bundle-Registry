@@ -1,25 +1,95 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Patch Bundle Registry GraphiQL</title>
-  <link rel="icon" href="../favicon.svg">
-  <link rel="stylesheet" href="https://unpkg.com/graphiql@3.9.0/graphiql.min.css">
-  <style>body{margin:0}nav{padding:10px}#graphiql{height:calc(100vh - 44px)}</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GraphiQL · Patch Bundle Registry</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="https://unpkg.com/graphiql@3.9.0/graphiql.min.css">
+    <link rel="stylesheet" href="../explorers.css">
+    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" defer></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" defer></script>
+    <script src="https://unpkg.com/graphiql@3.9.0/graphiql.min.js" defer></script>
+    <noscript><style>#explorer-status { display: none; }</style></noscript>
 </head>
-<body>
-  <nav><a href="../">Patch Bundle Registry</a> · <a href="../api-docs/">REST API</a></nav>
-  <div id="graphiql"></div>
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/graphiql@3.9.0/graphiql.min.js"></script>
-  <script type="module">
-    const response = await fetch("../config.json");
-    if (!response.ok) throw new Error("Site configuration unavailable");
-    const config = await response.json();
-    ReactDOM.createRoot(document.getElementById("graphiql")).render(
-      React.createElement(GraphiQL,{fetcher:GraphiQL.createFetcher({url:config.api + "/v1/graphql", subscriptionUrl:config.api.replace(/^http/, "ws") + "/v1/graphql"}),
-        defaultQuery:"{ source(limit: 10) { id url bundles(limit: 3) { id version } } }"}));
-  </script>
+<body class="graphql-page">
+    <header class="explorer-header">
+        <a class="explorer-home" href="../">Patch Bundle Registry</a>
+        <nav aria-label="API explorers">
+            <a href="../api-docs/">REST API</a>
+            <a href="./" aria-current="page">GraphiQL</a>
+        </nav>
+    </header>
+    <main aria-label="GraphQL explorer">
+        <p class="explorer-status" id="explorer-status" role="status">Loading GraphiQL…</p>
+        <noscript><p class="explorer-status">Enable JavaScript to use GraphiQL.</p></noscript>
+        <div id="graphiql"></div>
+    </main>
+    <script type="module">
+        function configureEditors(root) {
+            // GraphiQL 3 mounts CodeMirror fields after the React container renders.
+            const fields = [
+                [".graphiql-query-editor", "GraphQL query"],
+                [".graphiql-editor-tool .graphiql-editor:nth-child(1)", "Query variables"],
+                [".graphiql-editor-tool .graphiql-editor:nth-child(2)", "Request headers"],
+                [".graphiql-response", "GraphQL response"]
+            ];
+            const narrow = matchMedia("(max-width: 700px)");
+            function wrapQuery() {
+                const editor = root.querySelector(".graphiql-query-editor .CodeMirror")?.CodeMirror;
+                if (editor && editor.getOption("lineWrapping") !== narrow.matches) {
+                    editor.setOption("lineWrapping", narrow.matches);
+                }
+            }
+            narrow.addEventListener("change", wrapQuery);
+
+            new MutationObserver(() => {
+                wrapQuery();
+                for (const [selector, label] of fields) {
+                    root.querySelector(`${selector} textarea:not([aria-label])`)?.setAttribute("aria-label", label);
+                    const scroll = root.querySelector(`${selector} .CodeMirror-scroll:not([tabindex="0"])`);
+                    if (scroll) {
+                        scroll.tabIndex = 0;
+                        scroll.setAttribute("role", "region");
+                        scroll.setAttribute("aria-label", label + " text");
+                    }
+                }
+            }).observe(root, { childList: true, subtree: true });
+        }
+
+        const status = document.getElementById("explorer-status");
+        try {
+            if (!globalThis.GraphiQL || !globalThis.React || !globalThis.ReactDOM)
+                throw new Error("GraphiQL is unavailable");
+            const response = await fetch("../config.json");
+            if (!response.ok) throw new Error("Site configuration is unavailable");
+            const config = await response.json();
+            const url = new URL("/v1/graphql", config.explorer_api || config.api);
+            const subscriptionUrl = new URL("/v1/graphql", config.api);
+            subscriptionUrl.protocol = subscriptionUrl.protocol === "https:" ? "wss:" : "ws:";
+            const fetcher = GraphiQL.createFetcher({ url: url.href, subscriptionUrl: subscriptionUrl.href });
+            const editorRoot = document.getElementById("graphiql");
+            configureEditors(editorRoot);
+            ReactDOM.createRoot(editorRoot).render(
+                React.createElement(GraphiQL, {
+                    fetcher,
+                    defaultQuery: `{
+  source(limit: 5) {
+    id
+    url
+    bundles(limit: 2) {
+      id
+      version
+    }
+  }
+}`
+                })
+            );
+            status.hidden = true;
+        } catch (error) {
+            console.error(error);
+            status.textContent = "Unable to load GraphiQL. Reload the page to try again.";
+        }
+    </script>
 </body>
 </html>

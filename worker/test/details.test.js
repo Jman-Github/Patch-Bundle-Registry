@@ -97,7 +97,7 @@ function browser(t, patches, extra = {}) {
             for (const match of rendered.matchAll(/data-bundle="([^"]+)"/g)) {
                 const group = element();
                 group.dataset.bundle = match[1];
-                group.remove = () => { group.isConnected = false; };
+                group.closest = () => ({ remove() { group.isConnected = false; } });
                 nodes.set(match[1], group);
             }
         }
@@ -112,25 +112,23 @@ function browser(t, patches, extra = {}) {
     return {api,dialog,root,focus};
 }
 
-test("Card activation handles mouse and keyboard while excluding embedded controls", t => {
-    const {api}=browser(t,async()=>[]);
-    const card=element();
-    let opened=0;
-    api.activateCard(card,()=>opened++);
-    assert.equal(card.attrs["aria-haspopup"],"dialog");
-    card.handlers.click({target:{closest:()=>null}});
-    assert.equal(opened,1);
+test("Card activation uses the details button and leaves other controls alone", t => {
+    const { api } = browser(t, async () => []);
+    const card = element(), button = card.querySelector(".card-details");
+    button.click = () => button.handlers.click();
+    let opened = 0;
+    api.activateCard(card, () => opened++);
+    assert.equal(card.attrs.role, undefined);
+    button.click();
+    assert.equal(opened, 1);
+    assert(button.focused);
     assert(card.classes.has("card-selected"));
-    for(const control of ["a","button","input","summary",".changelog-preview",".changelog-content"]) {
-        card.handlers.click({target:{closest:selector=>selector.split(",").includes(control) ? control : null}});
+    for (const control of ["a", "button", "input", "summary", ".changelog-preview"]) {
+        card.handlers.click({ target: { closest: selector => selector.split(", ").includes(control) } });
     }
-    assert.equal(opened,1);
-    let prevented=false;
-    card.handlers.keydown({target:card,key:"Enter",preventDefault(){prevented=true;}});
-    assert(prevented);
-    assert.equal(opened,2);
-    card.handlers.keydown({target:{},key:" ",preventDefault(){throw Error("nested control");}});
-    assert.equal(opened,2);
+    assert.equal(opened, 1);
+    card.handlers.click({ target: { closest: () => null } });
+    assert.equal(opened, 2);
 });
 
 test("Bundle windows show app metadata, search patches, and restore focus on close", async t => {
@@ -227,13 +225,40 @@ test("Completed searches remove nonmatching bundles and update the result count"
     const search = dialog.querySelector(".details-search");
     search.value = "unmatched";
     search.handlers.input();
-    assert.equal(dialog.querySelector(".details-count").textContent, "1 bundle");
+    assert.equal(dialog.querySelector(".details-count").textContent, "Searching patches...");
     resolve([video]);
     await new Promise(done => setImmediate(done));
     assert.equal(dialog.querySelector(".details-count").textContent, "0 bundles");
     assert.match(dialog.querySelector(".details-body").innerHTML, /No bundles or patches match/);
 });
 
+
+test("Typing during an app search shares at most three concurrent patch requests", async t => {
+    const summaries = Array.from({ length: 7 }, (_, index) => ({
+        id: String(index), version: "v1", sourceUrl: "https://github.com/o/a",
+        bundleType: "Morphe:V1", metadataStatus: "verified"
+    }));
+    const pending = [];
+    const { api, dialog } = browser(t, () =>
+        new Promise(resolve => pending.push(resolve)), { getSummaries: () => summaries });
+    api.openApp({ app_name: "Video App", package_name: "com.video",
+        bundles: summaries.map(bundle => ({ bundle_id: bundle.id, patch_count: 1 })) });
+    const search = dialog.querySelector(".details-search");
+    for (const query of ["H", "Hide", "Hide ads"]) {
+        search.value = query;
+        search.handlers.input();
+        assert.equal(pending.length, 3);
+    }
+    let completed = 0;
+    while (pending.length) {
+        assert(pending.length <= 3);
+        completed++;
+        pending.shift()([video]);
+        await new Promise(done => setImmediate(done));
+    }
+    assert.equal(completed, 7);
+    assert.equal(dialog.querySelector(".details-count").textContent, "7 bundles");
+});
 
 test("Failed background searches show an escaped error without rebuilding controls", async t => {
     let reject;
@@ -335,17 +360,23 @@ test("Old changelog responses cannot replace a newer bundle window", async t => 
     assert.equal(dialog.querySelector(".details-changelog").innerHTML, "New notes");
 });
 
-test("Missing or failed changelogs keep app and patch details accessible", async t => {
+test("A failed changelog can be retried without leaving the bundle", async t => {
+    let attempts = 0;
     const {api,dialog} = browser(t, async () => [video], {
         bundleChangelog: async bundle => {
-            if (bundle.version === "failed") throw new Error("Notes unavailable");
-            return "";
+            if (bundle.version === "empty") return "";
+            if (++attempts === 1) throw new Error("Notes unavailable");
+            return "Recovered notes";
         }
     });
     await api.openBundle({version:"empty",sourceUrl:"https://github.com/o/a"}, {section:"changelog"});
     assert.match(dialog.querySelector(".details-changelog").innerHTML, /No changelog was provided/);
     await api.openBundle({version:"failed",sourceUrl:"https://github.com/o/a"}, {section:"changelog"});
-    assert.match(dialog.querySelector(".details-changelog").textContent, /Unable to load changelog: Notes unavailable/);
+    const changelog = dialog.querySelector(".details-changelog");
+    assert.match(changelog.innerHTML, /Unable to load changelog: Notes unavailable/);
+    changelog.querySelector("[data-retry-detail]").handlers.click();
+    await new Promise(done => setImmediate(done));
+    assert.equal(changelog.innerHTML, "Recovered notes");
     dialog.querySelector(".details-sections").querySelector('[data-details-section="patches"]').handlers.click();
     await new Promise(done => setImmediate(done));
     assert.match(dialog.querySelector(".details-body").innerHTML, /Hide ads/);
@@ -365,7 +396,7 @@ test("Options use compact patch headings and readable types and structured value
     assert.doesNotMatch(html, /kotlin.Long|<code>/);
 });
 
-test("App windows provide name and package copy controls and actions in the bundle header", t => {
+test("App windows provide copy controls and bundle actions outside the disclosure", t => {
     const {api,dialog} = browser(t,async()=>[],{getSummaries:()=>[{
         id:"a",version:"v1",sourceUrl:"https://github.com/o/a",bundleType:"Morphe:V1",
         downloadUrl:"https://example.test/bundle.mpp",metadataStatus:"verified"
@@ -374,10 +405,10 @@ test("App windows provide name and package copy controls and actions in the bund
     assert.match(dialog.innerHTML,/aria-label="Copy app name"/);
     assert.match(dialog.innerHTML,/data-copy-text="com.video"/);
     const body = dialog.querySelector(".details-body").innerHTML;
-    assert.match(body, /<summary>[^]*?aria-label="Download bundle"[^]*?<\/summary>/);
+    assert.doesNotMatch(body.match(/<summary>([^]*?)<\/summary>/)[1], /<(a|button)\b/);
+    assert.match(body, /<div class="details-group-actions"[^]*?aria-label="Download bundle"/);
     assert.match(body, /aria-label="Open repository"/);
     assert.match(body, /data-copy-text="https:\/\/api.test\//);
-    assert.doesNotMatch(body, /<div class="details-group-actions"/);
 });
 
 test("Detail navigation records bundle sections and apps, with silent history restoration", async t => {

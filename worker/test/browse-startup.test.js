@@ -61,6 +61,7 @@ test("Saved bundle selections restore immediately after parsing", () => {
     assert.equal(view.get("bundle-version-filter").disabled, false);
     assert.equal(view.get("results").classes.has("grid-view"), true);
     assert.equal(view.filters.find(button => button.classes.has("active")).id, "all");
+    assert.deepEqual(view.filters.map(button => button.attrs.get("aria-pressed")), ["true", "false", "false", "false"]);
 });
 test("Malformed and blocked preferences show usable defaults without waiting for modules", () => {
     for (const options of [{}, {blocked:true}]) {

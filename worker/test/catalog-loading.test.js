@@ -114,8 +114,8 @@ test("Browse includes Reseam internal patches found by readable-name search alia
   const calls=[];
   const env={currentTab:"bundles",currentSearchQuery:"feed filter",currentPackageFilter:"",
     currentSourceUrl:"",currentBundleType:"",currentBundleVersion:"",currentFilter:"latest",
-    allBundles:[bundle],filteredBundles:[],searchSequence:0,status:{textContent:""},
-    document:{scrollingElement:{scrollTop:0}},saveBrowsePreferences(){},setupVirtualizer(){},updateStatus(){},
+    allBundles:[bundle],filteredBundles:[],searchSequence:0,status:{textContent:""},resetFilters:{hidden:true},
+    resetResultsScroll(){},saveBrowsePreferences(){},setupVirtualizer(){},updateStatus(){},
     matchesReleaseFilter(){return true;},reseamInternalSearchAlias,patchDisplayName,
     transformPatch:patch=>({...patch,compatiblePackages:[]}),
     catalog:{async patchRows(args){

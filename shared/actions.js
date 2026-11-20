@@ -12,7 +12,7 @@ export function iconAction(kind, label, escape, {href, copy, disabled = false} =
         `type="button" ${disabled ? "disabled" : ""} data-copy-text="${escape(copy ?? "")}"`;
     return `<${tag} class="icon-action" ${target} aria-label="${escape(label)}" data-tooltip="${escape(label)}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>
-        <span class="action-tooltip" role="tooltip">${escape(label)}</span></${tag}>`;
+        <span class="action-tooltip" aria-hidden="true">${escape(label)}</span></${tag}>`;
 }
 
 /** Reseam releases support two import contracts; keep the choice local to this card. */
@@ -22,22 +22,22 @@ export function importFormatAction(escape, registryUrl, reseamUrl, registryDisab
         ["Reseam Manager JSON", reseamUrl, false]
     ];
     return `<span class="copy-format-menu">
-        <button type="button" class="icon-action copy-format-trigger" aria-haspopup="true"
-            aria-expanded="false" aria-label="Choose import link format" data-tooltip="Choose import link format"
-            >
+        <button type="button" class="icon-action copy-format-trigger"
+            aria-expanded="false" aria-label="Choose import link format" data-tooltip="Choose import link format">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths.link}</svg>
-            <span class="action-tooltip" role="tooltip">Choose import link format</span>
+            <span class="action-tooltip" aria-hidden="true">Choose import link format</span>
         </button>
         <span class="copy-format-options" role="group" aria-label="Import link format" hidden>
             ${choices.map(([label, url, disabled]) => `<button type="button" class="icon-action copy-format-option"
                 data-copy-text="${escape(url)}" data-tooltip="Copy ${escape(label)}"
                 aria-label="Copy ${escape(label)}" ${disabled ? "disabled" : ""}>${escape(label)}
-                <span class="action-tooltip" role="tooltip">Copy ${escape(label)}</span></button>`).join("")}
+                <span class="action-tooltip" aria-hidden="true">Copy ${escape(label)}</span></button>`).join("")}
         </span>
     </span>`;
 }
 export function bindActions(container) {
+    const showFeedback = new Map();
     container.querySelectorAll(".copy-format-trigger").forEach(trigger => {
         if (!trigger.classList?.contains?.("copy-format-trigger")) return;
         trigger.addEventListener("click", event => {
@@ -46,6 +46,11 @@ export function bindActions(container) {
             const options = trigger.parentElement.querySelector(".copy-format-options");
             options.hidden = !options.hidden;
             trigger.setAttribute("aria-expanded", String(!options.hidden));
+        });
+        trigger.parentElement.addEventListener("focusout", event => {
+            if (trigger.parentElement.contains(event.relatedTarget)) return;
+            trigger.parentElement.querySelector(".copy-format-options").hidden = true;
+            trigger.setAttribute("aria-expanded", "false");
         });
         // Escape must also work after keyboard focus moves into a copy option.
         trigger.parentElement.addEventListener("keydown", event => {
@@ -79,13 +84,28 @@ export function bindActions(container) {
             tip.style.top = Math.max(8, rect.bottom + size.height + 12 <= window.innerHeight
                 ? rect.bottom + 6 : rect.top - size.height - 6) + "px";
         };
+        showFeedback.set(action, message => {
+            const tip = action.querySelector(".action-tooltip");
+            tip.textContent = message;
+            action.classList.add("tooltip-visible");
+            placeTooltip();
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => {
+                tip.textContent = action.dataset.tooltip;
+                action.classList.remove("tooltip-visible");
+            }, 1800);
+        });
         action.addEventListener("pointerenter", placeTooltip);
         action.addEventListener("focus", placeTooltip);
         action.addEventListener("pointerdown", event => {
             if (event.pointerType === "mouse") return;
             held = false;
             clearTimeout(hideTimer);
-            holdTimer = setTimeout(() => { held = true; placeTooltip(); action.classList.add("tooltip-visible"); }, 500);
+            holdTimer = setTimeout(() => {
+                held = true;
+                action.classList.add("tooltip-visible");
+                placeTooltip();
+            }, 500);
         });
         action.addEventListener("pointerup", () => {
             clearHold();
@@ -96,13 +116,17 @@ export function bindActions(container) {
         });
         action.addEventListener("pointerleave", clearHold);
         action.addEventListener("contextmenu", event => { if (held) event.preventDefault(); });
+        action.addEventListener("click", event => {
+            if (!held) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            held = false;
+        }, true);
         action.addEventListener("click", async event => {
-            // Actions embedded in a disclosure header must not toggle its contents.
             event.stopPropagation();
-            if (held) { event.preventDefault(); held = false; return; }
             if (!action.hasAttribute("data-copy-text")) return;
             event.preventDefault();
-            const tip = action.querySelector(".action-tooltip");
+            let target = action;
             let message;
             try { await navigator.clipboard.writeText(action.dataset.copyText); message = "Copied!"; }
             catch { message = "Unable to copy"; }
@@ -112,17 +136,12 @@ export function bindActions(container) {
                 const trigger = menu.querySelector(".copy-format-trigger");
                 trigger.setAttribute("aria-expanded", "false");
                 trigger.focus();
+                target = trigger;
             }
-            tip.textContent = message;
-            action.setAttribute("aria-label", message);
-            placeTooltip();
-            action.classList.add("tooltip-visible");
-            clearTimeout(hideTimer);
-            hideTimer = setTimeout(() => {
-                tip.textContent = action.dataset.tooltip;
-                action.setAttribute("aria-label", action.dataset.tooltip);
-                action.classList.remove("tooltip-visible");
-            }, 1800);
+            (showFeedback.get(target) || showFeedback.get(action))(message);
+            const status = action.closest?.("dialog")?.querySelector("[data-copy-status]") ||
+                globalThis.document?.querySelector("[data-copy-status]");
+            status?.replaceChildren(message);
         });
     });
 }

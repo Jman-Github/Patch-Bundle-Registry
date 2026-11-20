@@ -225,10 +225,11 @@ test("Inline changelog retries failed loading when reopened", async () => {
 });
 
 test("Bundle cards show app counts and compact labeled actions", () => {
-  const card = cardHarness("Morphe:V1",{appCount:1}).render();
+  const card = cardHarness("Morphe:V1",{appCount:1, downloadUrl:"https://repo.test/patches.mpp"}).render();
   assert.match(card.innerHTML,/2 patches · 1 app/);
   assert.match(card.innerHTML,/class="bundle-actions"/);
-  assert.match(card.innerHTML,/aria-label="Download bundle"/);
+  assert.match(card.innerHTML,/<a[^>]+href="https:\/\/repo\.test\/patches\.mpp"[^>]+aria-label="Download bundle"/);
+  assert.doesNotMatch(cardHarness("Morphe:V1").render().innerHTML,/aria-label="Download bundle"/);
   assert.match(card.innerHTML,/aria-label="Copy remote bundle URL"/);
   assert.doesNotMatch(card.innerHTML,/Explore apps and patch options/);
 });

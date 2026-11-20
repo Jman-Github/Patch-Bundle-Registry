@@ -69,11 +69,11 @@ async function frontend(prefs, suppliedSummaries) {
         bundleType:b.bundle_type, isLatest:b.is_latest, isPrerelease:Boolean(b.is_prerelease)});
     const context = {document:{querySelectorAll:()=>tabs,querySelector:()=>node(),
         getElementById:id=>fields[id]??=node(id)},results:node(),container:node(),viewToggle:node(),
-        input:node(),packageFilter:node(),sourceFilter:node(),bundleVersionFilter:node(),bundleTypeFilter:node(),
+        input:node(),packageFilter:node(),sourceFilter:node(),bundleVersionFilter:node(),bundleTypeFilter:node(),status:node(),
         filterButtons:["all","latest","release","prerelease"].map(filter=>Object.assign(node(),{dataset:{filter}})),
         navigationReady:true,navigationRevision:0,navigation:{read:()=>null,write(){return true;}},
         detailsBrowser:{close(){},openApp(){},async openBundle(){}},
-        bundleSelection:0,sourceSelection:0,sourcePicker:{sync(){}}, browsePreferences:prefs,currentTab:prefs.activeTab,
+        sourceSelection:0,sourcePicker:{sync(){}}, browsePreferences:prefs,currentTab:prefs.activeTab,
         summaries,latestBundles:[transformBundle(summaries[0])],sourceVersions:[],allBundles:[],catalog:{},
         transformBundle,compareReleaseDates,matchesReleaseFilter,bundleTypeLabel:x=>x,
         Option: function(label,value) { this.label=label; this.value=value; },
@@ -141,37 +141,20 @@ test("Switching sources rebuilds versions after clearing a retired bundle type",
     assert.equal(prefs.read("bundles").source,other);
 });
 
-test("Slow version details cannot overwrite a newer selection or a changed source",async()=>{
-    for(const action of ["version","source","tab"]) {
-        const prefs=createBrowsePreferences(()=>storage());
-        prefs.save("bundles",{source:"https://github.com/a/b",release:"all"});
-        const {context:c,tabs}=await frontend(prefs);
-        let resolve;
-        c.catalog={historyBundles:async()=>[],file:()=>new Promise(done=>{resolve=done;})};
-        const pending=c.selectBundleVersion("v1");
-        if(action==="version") await c.selectBundleVersion("");
-        if(action==="source") await c.selectSource("");
-        if(action==="tab") tabs[1].click();
-        resolve({description:"Old release details"});
-        await pending;
-        assert.equal(c.currentBundleVersion,"",action);
-        assert.equal(prefs.read(action==="tab"?"apps":"bundles").version,"",action);
-    }
-});
-
-test("A failed stale version request cannot replace the current status",async()=>{
-    const prefs=createBrowsePreferences(()=>storage());
-    prefs.save("bundles",{source:"https://github.com/a/b",release:"all"});
-    const {context:c}=await frontend(prefs);
-    let reject;
-    c.status={textContent:"Current view"};
-    c.recoverGeneration=async()=>false;
-    c.catalog={historyBundles:async()=>[],file:()=>new Promise((_,fail)=>{reject=fail;})};
-    const pending=c.selectBundleVersion("v1");
-    await c.selectBundleVersion("");
-    reject(new Error("Old request failed"));
-    await pending;
-    assert.equal(c.status.textContent,"Current view");
+test("Historical versions are selectable before loading changelogs", async () => {
+    const prefs = createBrowsePreferences(() => storage());
+    prefs.save("bundles", { source: "https://github.com/a/b", release: "all" });
+    const { context: c, tabs } = await frontend(prefs);
+    c.catalog = { async historyBundles() { return []; }, file() { assert.fail("Unexpected detail request"); } };
+    await c.selectBundleVersion("v1");
+    assert.equal(c.allBundles[0].id, "old");
+    assert.equal(prefs.read("bundles").version, "v1");
+    tabs[1].click();
+    assert.equal(c.currentBundleVersion, "");
+    tabs[0].click();
+    assert.equal(c.currentBundleVersion, "v1");
+    await c.selectSource("");
+    assert.equal(c.currentBundleVersion, "");
 });
 
 
@@ -193,6 +176,17 @@ test("A pending source history cannot clear a version restored by tab navigation
     assert.equal(prefs.read("bundles").version,"v1");
 });
 
+test("Failed source history keeps the latest source release selectable", async () => {
+    const { context: c } = await frontend(createBrowsePreferences(() => storage()));
+    c.recoverGeneration = async () => false;
+    c.catalog = { async historyBundles() { throw new Error("Offline"); } };
+    await c.selectSource("https://github.com/a/b");
+    assert.equal(c.currentSourceUrl, "https://github.com/a/b");
+    assert.equal(c.bundleVersionFilter.disabled, false);
+    assert(c.bundleVersionFilter.options.some(option => option.value === "v2"));
+    assert.match(c.status.textContent, /Older versions could not be loaded/);
+});
+
 test("A source error awaiting generation recovery cannot overwrite a newer view",async()=>{
     const prefs=createBrowsePreferences(()=>storage());
     const url="https://github.com/a/b";
@@ -206,9 +200,21 @@ test("A source error awaiting generation recovery cannot overwrite a newer view"
     const pending=c.selectSource(url);
     await recovering;
     await c.selectSource("");
+    c.status.textContent = "Current view";
     finishRecovery(false);
     await pending;
     assert.equal(c.status.textContent,"Current view");
+});
+
+test("A shared source link shows known releases when its history is unavailable", async () => {
+    const { context: c } = await frontend(createBrowsePreferences(() => storage()));
+    const url = "https://github.com/a/b";
+    c.catalog = { async historyBundles() { throw new Error("History unavailable"); } };
+    c.recoverGeneration = async () => false;
+    await c.restoreNavigation({ tab: "bundles", browse: { source: url, version: "v1", release: "all" } });
+    assert.equal(c.currentSourceUrl, url);
+    assert.equal(c.currentBundleVersion, "v1");
+    assert.match(c.status.textContent, /Older versions could not be loaded/);
 });
 
 test("A shared historical bundle loads source history before opening the selected section", async () => {

@@ -63,18 +63,22 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
             dialog.className = "catalog-dialog";
             document.body.appendChild(dialog);
             dialog.addEventListener("click", event => { if (event.target === dialog) close(); });
-            dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
+            const dismiss = event => { event.preventDefault(); close(); };
+            dialog.addEventListener("cancel", dismiss);
+            dialog.addEventListener("keydown", event => {
+                if (event.key === "Escape") dismiss(event);
+            });
             dialog.addEventListener("close", () => {
                 // A queued close event must not invalidate a newly opened route.
                 if (dialog.open) return;
                 revision++;
-                document.documentElement.classList.remove("details-open");
                 document.querySelectorAll(".card-selected").forEach(card => card.classList.remove("card-selected"));
                 if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
                 else document.querySelector(".catalog-tab.active")?.focus({ preventScroll: true });
             });
         }
-        previousFocus = document.activeElement;
+        if (!dialog.open) previousFocus = document.activeElement;
+        const searchLabel = copyApp ? "Search bundles or patches" : "Search apps or patches";
         dialog.innerHTML = `<div class="details-heading">
             <span class="owner-avatar-link app-icon"><img class="owner-avatar" src="${escape(icon || "")}" alt=""></span>
             <div><h2 id="details-title">${escape(title)}${copyApp ? iconAction("copy", "Copy app name", escape, {copy:title}) : ""}</h2>
@@ -85,8 +89,9 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
                 <button type="button" data-details-section="patches" aria-pressed="true">Apps and patches</button>
                 <button type="button" data-details-section="changelog" aria-pressed="false">Changelog</button></div>
             <div class="details-toolbar"><input type="search" class="details-search"
-                aria-label="Search apps, bundles and patches" placeholder="Search apps, patches, descriptions, packages or versions...">
+                aria-label="${searchLabel}" placeholder="${searchLabel}">
                 <span class="details-count" aria-live="polite"></span></div>
+            <div class="visually-hidden" role="status" data-copy-status></div>
             <div class="details-body"><p role="status">Loading compatibility and patches...</p></div>
             <div class="details-body details-changelog changelog-content" tabindex="0" aria-label="Release changelog" hidden></div>`;
         bindActions(dialog);
@@ -95,7 +100,6 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
         delete dialog.dataset.ownerAvatar;
         if (ownerAvatar && ownerAvatar !== icon) dialog.dataset.ownerAvatar = ownerAvatar;
         installAvatarFallback(dialog, title);
-        document.documentElement.classList.add("details-open");
         if (!dialog.open) dialog.showModal();
         dialog.querySelector(".details-search").focus();
         return { token: revision, body: dialog.querySelector(".details-body"),
@@ -104,25 +108,21 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
             changelog: dialog.querySelector(".details-changelog") };
     }
     function alive(view) { return view.token === revision && dialog.open; }
+    function detailError(label, error) {
+        return `<div class="details-error"><p role="status">${label}: ${escape(error)}</p>
+            <button class="card-toggle" type="button" data-retry-detail>Retry</button></div>`;
+    }
     function activateCard(card, open) {
         card.classList.add("interactive-card");
-        card.tabIndex = 0;
-        card.setAttribute("role", "button");
-        card.setAttribute("aria-haspopup", "dialog");
-        const activate = () => {
+        const button = card.querySelector(".card-details");
+        button.addEventListener("click", () => {
             card.classList.add("card-selected");
-            card.focus({ preventScroll: true });
+            button.focus({ preventScroll: true });
             open();
-        };
-        card.addEventListener("click", event => {
-            if (event.target.closest("a,button,input,select,summary,.changelog-preview,.changelog-content,.patch-options")) return;
-            if (window.getSelection()?.toString()) return;
-            activate();
         });
-        card.addEventListener("keydown", event => {
-            if (event.target !== card || !["Enter", " "].includes(event.key)) return;
-            event.preventDefault();
-            activate();
+        card.addEventListener("click", event => {
+            if (event.target.closest("a, button, input, select, summary, .changelog-preview, .patch-options")) return;
+            if (!window.getSelection()?.toString()) button.click();
         });
     }
     function image(icon) {
@@ -143,9 +143,9 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
             bundle.iconUrl, bundle.repoDescription, bundle.ownerAvatarUrl);
         let patchesPending, changelogPending;
         const loadPatches = () => patchesPending ??= (async () => {
-            try {
-                const patches = await bundlePatches({ ...bundle, appPackage: undefined });
-                if (!alive(view)) return;
+            view.body.innerHTML = '<p role="status">Loading compatibility and patches...</p>';
+            const patches = await bundlePatches({ ...bundle, appPackage: undefined });
+            if (!alive(view)) return;
                 const groups = groupBundlePatches(patches, getApplications());
                 const render = () => {
                     const matches = filterPatchGroups(groups, view.search.value, patchMatchesSearch);
@@ -165,19 +165,30 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
                 };
                 view.search.addEventListener("input", render);
                 render();
-            } catch (error) { if (alive(view)) view.body.textContent = "Unable to load patches: " + error.message; }
-        })();
+        })().catch(error => {
+            patchesPending = null;
+            if (!alive(view)) return;
+            view.body.innerHTML = detailError("Unable to load patches", error.message);
+            view.body.querySelector("[data-retry-detail]").addEventListener("click", () => {
+                view.search.focus({ preventScroll: true });
+                void loadPatches();
+            });
+        });
         const loadChangelog = () => changelogPending ??= (async () => {
             view.changelog.innerHTML = '<p role="status">Loading changelog...</p>';
-            try {
-                const description = await bundleChangelog(bundle);
-                if (!alive(view)) return;
-                view.changelog.innerHTML = description ? renderMarkdown(description) :
-                    '<p role="status">No changelog was provided for this release.</p>';
-            } catch (error) {
-                if (alive(view)) view.changelog.textContent = "Unable to load changelog: " + error.message;
-            }
-        })();
+            const description = await bundleChangelog(bundle);
+            if (!alive(view)) return;
+            view.changelog.innerHTML = description ? renderMarkdown(description) :
+                '<p role="status">No changelog was provided for this release.</p>';
+        })().catch(error => {
+            changelogPending = null;
+            if (!alive(view)) return;
+            view.changelog.innerHTML = detailError("Unable to load changelog", error.message);
+            view.changelog.querySelector("[data-retry-detail]").addEventListener("click", () => {
+                view.changelog.focus({ preventScroll: true });
+                void loadChangelog();
+            });
+        });
         const patchesButton = view.sections.querySelector('[data-details-section="patches"]');
         const changelogButton = view.sections.querySelector('[data-details-section="changelog"]');
         const selectSection = (selected, updateUrl = true) => {
@@ -206,6 +217,7 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
             const summary = summaries.get(reference.bundle_id);
             return summary ? [{ reference, bundle: transformBundle(summary), patches: null, pending: null, error: null }] : [];
         });
+        const groupsById = new Map(groups.map(group => [group.bundle.id, group]));
         const load = group => {
             if (!group.pending) group.pending = bundlePatches({ ...group.bundle, appPackage: app.package_name })
                 .then(patches => { group.patches = patches; })
@@ -214,6 +226,17 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
         };
         const opened = new Set();
         const label = group => repositoryNames(group.bundle).tracked;
+
+        function groupPatches(group, query) {
+            if (group.error) return detailError("Unable to load patches", group.error);
+            if (!group.patches) return '<p role="status">Loading patches...</p>';
+            return patchesHtml(group.patches, query);
+        }
+        function updateCount(visible) {
+            const waiting = view.search.value.trim() && groups.some(group => !group.patches && !group.error);
+            view.count.textContent = waiting ? "Searching patches..." : countLabel(visible, "bundle");
+        }
+
         function render() {
             if (!alive(view)) return;
             const query = view.search.value.trim();
@@ -223,37 +246,39 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
                 return !query || terms.every(term => text.includes(term)) || !group.patches ||
                     group.patches.some(patch => patchMatchesSearch(patch, query));
             });
-            view.count.textContent = countLabel(visible.length, "bundle");
+            updateCount(visible.length);
             view.body.innerHTML = visible.map(group => {
                 const bundle = group.bundle, expanded = opened.has(bundle.id) || Boolean(query);
                 const url = new URL(bundleImportPath(bundle, true), getApi()).href;
-                return `<details class="details-group" data-bundle="${escape(bundle.id)}" data-label="${escape(label(group))}" data-owner-avatar="${escape(bundle.ownerAvatarUrl || "")}" ${expanded ? "open" : ""}>
+                return `<div class="app-detail-group">
+                    <details class="details-group" data-bundle="${escape(bundle.id)}" data-label="${escape(label(group))}" data-owner-avatar="${escape(bundle.ownerAvatarUrl || "")}" ${expanded ? "open" : ""}>
                     <summary>${image(bundle.iconUrl)}<span class="details-group-name">
                         <strong>${escape(label(group))}</strong>
                         <span class="app-package">${escape(bundle.version)} · ${escape(bundleTypeLabel(bundle.bundleType))} · ${escape(formatDate(bundle.createdAt))}</span></span>
                         <span class="bundle-badge">${group.reference.compatibility_unknown ? "Count unavailable" : countLabel(group.reference.patch_count, "patch", "patches")}</span>
-                        <span class="details-group-actions">
-                            ${iconAction("repository", "Open repository", escape, {href:bundle.sourceUrl})}
-                            ${bundle.downloadUrl ? iconAction("download", "Download bundle", escape, {href:bundle.downloadUrl}) : ""}
-                            ${bundle.bundleType === "Reseam"
-                                ? importFormatAction(escape, url,
-                                    new URL(reseamNativeImportPath(bundle, true), getApi()).href,
-                                    bundle.metadataStatus !== "verified")
-                                : iconAction("link", "Copy this version URL", escape, {copy:url})}</span>${disclosureArrow}</summary>
+                        ${disclosureArrow}</summary>
                     ${bundle.metadataStatus !== "verified" ? '<p class="metadata-note">Compatibility metadata for this release is unverified.</p>' : ""}
-                    <div class="details-patches">${group.error ? `<p role="status">Unable to load patches: ${escape(group.error)}</p>` :
-                        group.patches ? patchesHtml(group.patches, terms.every(term => (label(group) + " " + bundle.version).toLowerCase().includes(term)) ? "" : query) :
-                        '<p role="status">Loading patches...</p>'}</div></details>`;
+                    <div class="details-patches">${groupPatches(group,
+                        terms.every(term => (label(group) + " " + bundle.version).toLowerCase().includes(term)) ? "" : query)}</div></details>
+                    <div class="details-group-actions" role="group" aria-label="Bundle actions">
+                        ${iconAction("repository", "Open repository", escape, {href:bundle.sourceUrl})}
+                        ${bundle.downloadUrl ? iconAction("download", "Download bundle", escape, {href:bundle.downloadUrl}) : ""}
+                        ${bundle.bundleType === "Reseam"
+                            ? importFormatAction(escape, url,
+                                new URL(reseamNativeImportPath(bundle, true), getApi()).href,
+                                bundle.metadataStatus !== "verified")
+                            : iconAction("link", "Copy this version URL", escape, {copy:url})}
+                    </div></div>`;
             }).join("") || '<p role="status">No bundles or patches match this search.</p>';
             bindImages(view.body);
             bindActions(view.body);
             view.body.querySelectorAll("[data-bundle]").forEach(element => {
-                const group = groups.find(group => group.bundle.id === element.dataset.bundle);
+                const group = groupsById.get(element.dataset.bundle);
                 element.addEventListener("toggle", () => {
-                    if (!element.isConnected) return;
+                    if (!element.isConnected || view.search.value.trim()) return;
                     if (element.open) {
                         opened.add(group.bundle.id);
-                        if (!view.search.value.trim() && !group.pending)
+                        if (!group.pending)
                             void load(group).then(() => updateLoadedGroup(group));
                     } else opened.delete(group.bundle.id);
                 });
@@ -270,32 +295,50 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
             const element = view.body.querySelector(`[data-bundle="${group.bundle.id}"]`);
             if (!labelMatches && group.patches &&
                 !group.patches.some(patch => patchMatchesSearch(patch, query))) {
-                element?.remove();
+                const card = element?.closest(".app-detail-group");
+                if (card?.contains?.(document.activeElement)) view.search.focus({ preventScroll: true });
+                card?.remove();
                 const remaining = view.body.querySelectorAll("[data-bundle]").length;
-                view.count.textContent = countLabel(remaining, "bundle");
+                updateCount(remaining);
                 if (!remaining) view.body.innerHTML = '<p role="status">No bundles or patches match this search.</p>';
                 return;
             }
             const target = element?.querySelector(".details-patches");
-            if (target) target.innerHTML = group.error
-                ? `<p role="status">Unable to load patches: ${escape(group.error)}</p>`
-                : patchesHtml(group.patches || [], labelMatches ? "" : query);
+            if (target) target.innerHTML = groupPatches(group, labelMatches ? "" : query);
+            updateCount(view.body.querySelectorAll("[data-bundle]").length);
         }
-        let searchRevision = 0;
-        view.search.addEventListener("input", () => {
-            const sequence = ++searchRevision;
-            render();
-            if (!view.search.value.trim()) return;
-            const queue = groups.filter(group => !group.pending);
-            // Browser reads use the local/published cache, never app metadata providers.
-            const worker = async () => {
-                while (queue.length && alive(view) && sequence === searchRevision && view.search.value.trim()) {
-                    const group = queue.shift();
+        view.body.addEventListener("click", event => {
+            const retry = event.target.closest("[data-retry-detail]");
+            if (!retry) return;
+            const element = retry.closest("[data-bundle]");
+            const group = groupsById.get(element.dataset.bundle);
+            element.querySelector("summary").focus({ preventScroll: true });
+            group.error = null;
+            group.pending = null;
+            updateLoadedGroup(group);
+            void load(group).then(() => updateLoadedGroup(group));
+        });
+
+        let searchWorkers = 0;
+        async function searchPatches() {
+            searchWorkers++;
+            try {
+                while (alive(view) && view.search.value.trim()) {
+                    const group = groups.find(group => !group.pending);
+                    if (!group) return;
                     await load(group);
                     updateLoadedGroup(group);
                 }
-            };
-            void Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));
+            } finally {
+                searchWorkers--;
+            }
+        }
+        view.search.addEventListener("input", () => {
+            render();
+            if (!view.search.value.trim()) return;
+            // Typing another character shares the same workers and pending requests.
+            const available = Math.min(3 - searchWorkers, groups.filter(group => !group.pending).length);
+            for (let worker = 0; worker < available; worker++) void searchPatches();
         });
         render();
     }

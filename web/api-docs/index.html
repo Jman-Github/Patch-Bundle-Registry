@@ -1,21 +1,98 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Patch Bundle Registry API</title>
-  <link rel="icon" href="../favicon.svg">
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.31.2/swagger-ui.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>REST API · Patch Bundle Registry</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.31.2/swagger-ui.css">
+    <link rel="stylesheet" href="../explorers.css">
+    <script src="https://unpkg.com/swagger-ui-dist@5.31.2/swagger-ui-bundle.js" defer></script>
+    <noscript><style>#explorer-status { display: none; }</style></noscript>
 </head>
-<body>
-  <p><a href="../">Patch Bundle Registry</a> · <a href="../graphiql/">GraphiQL</a></p>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5.31.2/swagger-ui-bundle.js"></script>
-  <script type="module">
-    const response = await fetch("../config.json");
-    if (!response.ok) throw new Error("Site configuration unavailable");
-    const config = await response.json();
-    SwaggerUIBundle({url:config.api + "/api.json",dom_id:"#swagger-ui",
-      deepLinking:true,validatorUrl:null,persistAuthorization:false});
-  </script>
+<body class="rest-page">
+    <header class="explorer-header">
+        <a class="explorer-home" href="../">Patch Bundle Registry</a>
+        <nav aria-label="API explorers">
+            <a href="./" aria-current="page">REST API</a>
+            <a href="../graphiql/">GraphiQL</a>
+            <a id="openapi-document" hidden>OpenAPI JSON</a>
+        </nav>
+    </header>
+    <main aria-label="REST API explorer">
+        <p class="explorer-status" id="explorer-status" role="status">Loading REST API reference…</p>
+        <noscript><p class="explorer-status">Enable JavaScript to use the REST API explorer.</p></noscript>
+        <div id="swagger-ui"></div>
+    </main>
+    <script type="module">
+        function configureSwagger(root) {
+            // Swagger mounts request controls and response output when an operation is expanded.
+            new MutationObserver(() => {
+                root.querySelector("#servers:not([aria-label])")?.setAttribute("aria-label", "API server");
+                for (const row of root.querySelectorAll("tr[data-param-name]")) {
+                    for (const input of row.querySelectorAll("input, select, textarea")) {
+                        if (!input.hasAttribute("aria-label") && !input.hasAttribute("aria-labelledby")) {
+                            input.setAttribute("aria-label", row.dataset.paramName);
+                        }
+                    }
+                }
+                const sections = [
+                    [".curl-command", ".curl", "cURL command"],
+                    [".highlight-code", ".microlight", "Response body"]
+                ];
+                for (const [section, output, label] of sections) {
+                    for (const block of root.querySelectorAll(section)) {
+                        block.querySelector(".copy-to-clipboard > button:not([aria-label])")
+                            ?.setAttribute("aria-label", "Copy " + label.toLowerCase());
+                        const scroll = block.querySelector(output + ":not([tabindex])");
+                        if (scroll) {
+                            scroll.tabIndex = 0;
+                            scroll.setAttribute("role", "region");
+                            scroll.setAttribute("aria-label", label);
+                        }
+                    }
+                }
+            }).observe(root, { childList: true, subtree: true });
+        }
+
+        const status = document.getElementById("explorer-status");
+        try {
+            if (!globalThis.SwaggerUIBundle) throw new Error("Swagger UI is unavailable");
+            const configResponse = await fetch("../config.json");
+            if (!configResponse.ok) throw new Error("Site configuration is unavailable");
+            const config = await configResponse.json();
+            const api = config.explorer_api || config.api;
+            const specUrl = new URL("/api.json", api);
+            const specResponse = await fetch(specUrl);
+            if (!specResponse.ok) throw new Error("The OpenAPI document is unavailable");
+            const spec = await specResponse.json();
+            if (config.explorer_api) spec.servers = [{ url: api }];
+            const accessibleOperations = () => ({
+                wrapComponents: {
+                    // Keep the path as text inside the operation's disclosure button.
+                    // Swagger still restores and updates hashes when operations open.
+                    OperationSummaryPath: (Original, { React }) => props =>
+                        React.createElement(Original, {
+                            ...props,
+                            operationProps: props.operationProps.set("isDeepLinkingEnabled", false)
+                        })
+                }
+            });
+            const swaggerRoot = document.getElementById("swagger-ui");
+            configureSwagger(swaggerRoot);
+            SwaggerUIBundle({
+                spec, domNode: swaggerRoot, deepLinking: true, validatorUrl: null,
+                persistAuthorization: false, syntaxHighlight: { theme: "obsidian" },
+                plugins: [accessibleOperations]
+            });
+            const documentLink = document.getElementById("openapi-document");
+            documentLink.href = specUrl.href;
+            documentLink.hidden = false;
+            status.hidden = true;
+        } catch (error) {
+            console.error(error);
+            status.textContent = "Unable to load the REST API explorer. Reload the page to try again.";
+        }
+    </script>
 </body>
 </html>

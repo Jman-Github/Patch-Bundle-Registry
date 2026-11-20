@@ -16,13 +16,18 @@ Changes: GitHub source management, header links, theme controls, application-ver
         <script src="theme.js"></script>
         <script src="browse-startup.js"></script>
         <link rel="stylesheet" href="style.css">
-        <link rel="icon" href="favicon.svg">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.14/purify.min.js"></script>
+        <link rel="icon" href="favicon.svg" type="image/svg+xml">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.14/purify.min.js" defer></script>
+        <noscript><style>
+            .catalog-statistics, .browse-toolbar, .search-row, .filter-row, .filter-buttons,
+            #status, #apps-note, #theme-toggle, #admin-access { display: none; }
+        </style></noscript>
     </head>
     <body>
-    <div class="container grid-view-enabled">
-        <div class="page-header">
+    <main class="container grid-view-enabled">
+        <div class="browse-controls">
+        <header class="page-header">
             <div>
                 <h1>Patch Bundle Registry</h1>
                 <p class="subtitle">Find patches, app compatibility, bundle versions, and changelogs</p>
@@ -47,29 +52,35 @@ Changes: GitHub source management, header links, theme controls, application-ver
                 </a>
                 <button id="admin-access" class="admin-access" type="button">Manage sources</button>
             </div>
-        </div>
+        </header>
+        <nav class="api-links" aria-label="API explorers">
+            <a href="api-docs/">REST API</a>
+            <a href="graphiql/">GraphiQL</a>
+        </nav>
         <section class="catalog-statistics" aria-label="Catalog statistics">
-            <div id="catalog-stats" class="catalog-stats" aria-live="polite">Loading catalog statistics...</div>
-            <p class="stats-note">Newest release per source, including prereleases. Patch totals reflect available metadata.</p>
+            <div id="catalog-stats" class="catalog-stats">Loading catalog statistics...</div>
         </section>
+        <div class="browse-toolbar">
         <div class="catalog-tabs" role="tablist" aria-label="Browse catalog">
             <button id="bundles-tab" class="catalog-tab active" role="tab" type="button" aria-selected="true" aria-controls="results">Bundles</button>
             <button id="apps-tab" class="catalog-tab" role="tab" type="button" aria-selected="false" aria-controls="results" tabindex="-1">Apps</button>
         </div>
+            <button id="view-toggle" class="view-toggle" type="button" aria-pressed="true">Grid view</button>
+        </div>
         <p id="apps-note" class="stats-note" hidden>Patches and compatibility are counted across matching bundle versions.</p>
         <div class="search-row">
             <input
-                    type="text"
+                    type="search"
                     id="search"
                     aria-label="Search bundles"
-                    placeholder="Search bundles by source URL or name..."
+                    placeholder="Search bundles or patches"
                     autocomplete="off"
             >
             <input
-                    type="text"
+                    type="search"
                     id="package-filter"
                     aria-label="Filter by package or app version, optionally package@version"
-                    placeholder="Filter by package or app version (e.g., 19.16)"
+                    placeholder="Package, version, or both"
                     autocomplete="off"
             >
         </div>
@@ -99,18 +110,24 @@ Changes: GitHub source management, header links, theme controls, application-ver
             </label>
         </div>
         <div class="filter-buttons">
-            <button class="filter-btn" data-filter="all">All</button>
-            <button class="filter-btn active" data-filter="latest">Latest</button>
-            <button class="filter-btn" data-filter="release">Release</button>
-            <button class="filter-btn" data-filter="prerelease">Prerelease</button>
-            <button id="view-toggle" class="view-toggle" type="button" aria-pressed="true">List view</button>
+            <div class="release-filters" role="group" aria-label="Release channel">
+                <button class="filter-btn" type="button" data-filter="all" aria-pressed="false">All</button>
+                <button class="filter-btn active" type="button" data-filter="latest" aria-pressed="true">Latest</button>
+                <button class="filter-btn" type="button" data-filter="release" aria-pressed="false">Release</button>
+                <button class="filter-btn" type="button" data-filter="prerelease" aria-pressed="false">Prerelease</button>
+            </div>
         </div>
-        <div id="status">Loading bundles...</div>
+        <div id="status" role="status">Loading bundles...</div>
+        <button id="catalog-retry" class="admin-access" type="button" hidden>Retry loading catalog</button>
+        <button id="reset-filters" class="admin-access" type="button" hidden>Reset filters</button>
+        </div>
+        <div class="visually-hidden" role="status" data-copy-status></div>
         <div id="results" class="grid-view" role="tabpanel" aria-labelledby="bundles-tab">
             <div class="v-track" id="v-track"></div>
         </div>
-    </div>
+        <noscript><p class="catalog-no-script">Enable JavaScript to browse the patch catalog.</p></noscript>
+    </main>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" id="catalog-app" src="app.js"></script>
     </body>
     </html>

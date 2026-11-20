@@ -16,6 +16,8 @@ def test_preview_generates_app_indexes_without_changing_tracked_catalog(tmp_path
     )
     (tmp_path / "web").mkdir()
     (tmp_path / "web/index.html").write_text("Current uncommitted UI", encoding="utf-8")
+    (tmp_path / "web/api-docs").mkdir()
+    (tmp_path / "web/api-docs/index.html").write_text("API explorer", encoding="utf-8")
     before = (tmp_path / "database/manifest.json").read_bytes()
     preview = prepare_preview(tmp_path)
     assert (tmp_path / "database/manifest.json").read_bytes() == before
@@ -32,7 +34,10 @@ def test_preview_generates_app_indexes_without_changing_tracked_catalog(tmp_path
             base_url=f"http://127.0.0.1:{server.server_port}", trust_env=False
         ) as client:
             assert client.get("/").text == "Current uncommitted UI"
-            assert client.get("/config.json").json()["live_data"] is False
+            assert client.get("/api-docs/").text == "API explorer"
+            config = client.get("/config.json").json()
+            assert config["explorer_api"] == str(client.base_url).rstrip("/")
+            assert config["live_data"] is False
             assert client.get("/database/manifest.json").json() == manifest
             assert client.get("/database/%2e%2e/%2e%2e/config/site.json").status_code == 404
     finally:

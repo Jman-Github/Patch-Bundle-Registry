@@ -1,0 +1,116 @@
+body { margin: 0; }
+[hidden] { display: none !important; }
+
+.explorer-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 24px;
+    padding: 8px clamp(12px, 3vw, 32px);
+    border-bottom: 1px solid #d9e0dc;
+    background: #f7faf8;
+    color: #242c27;
+    font: 600 14px/1.4 system-ui, sans-serif;
+}
+
+.explorer-header a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    color: #205f38;
+    text-decoration: none;
+}
+
+.explorer-header a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.explorer-header a:focus-visible { outline: 2px solid #237440; outline-offset: 2px; }
+.explorer-home { font-size: 15px; }
+.explorer-header nav { display: flex; flex-wrap: wrap; gap: 4px; }
+.explorer-header nav a { padding-inline: 10px; border-radius: 6px; }
+.explorer-header nav [aria-current="page"] { background: #e0eee5; }
+
+.explorer-status {
+    margin: 20px clamp(12px, 3vw, 32px);
+    font: 14px/1.5 system-ui, sans-serif;
+    color: #38443e;
+}
+
+.rest-page .swagger-ui .info .title small pre,
+.rest-page .swagger-ui .opblock .opblock-summary-method {
+    color: #0d1720;
+}
+
+.rest-page .swagger-ui .try-out__btn.cancel {
+    color: #a72c2c;
+    border-color: #a72c2c;
+}
+
+.rest-page .swagger-ui .execute {
+    background: #245e9e;
+    border-color: #245e9e;
+}
+.rest-page .swagger-ui .execute:hover { background: #1b4c83; }
+.rest-page .swagger-ui .download-contents { background: #505c70; }
+.rest-page .swagger-ui .parameter__in { color: #505b65; }
+.rest-page .swagger-ui [role="region"]:focus-visible { outline: 2px solid #237440; outline-offset: -2px; }
+
+body.graphiql-light #graphiql .graphiql-container {
+    --color-info: 208, 100%, 38%;
+    --color-tertiary: 188, 100%, 25%;
+    --color-success: 158, 66%, 28%;
+    --color-warning: 34, 100%, 28%;
+}
+
+@media (prefers-color-scheme: light) {
+    body:not(.graphiql-dark) #graphiql .graphiql-container {
+        --color-info: 208, 100%, 38%;
+        --color-tertiary: 188, 100%, 25%;
+        --color-success: 158, 66%, 28%;
+        --color-warning: 34, 100%, 28%;
+    }
+}
+
+#graphiql .graphiql-logo .graphiql-logo-link { color: hsl(var(--color-neutral)); }
+#graphiql .cm-s-graphiql .cm-punctuation { color: hsla(var(--color-neutral), .82); }
+#graphiql .CodeMirror-scroll:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+
+.graphql-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+}
+
+.graphql-page main { position: relative; flex: 1; }
+#graphiql { position: absolute; inset: 0; }
+
+@media (max-width: 700px) {
+    .rest-page .swagger-ui .wrapper { padding-inline: 12px; }
+    .rest-page .swagger-ui .opblock-summary-path { overflow-wrap: anywhere; }
+    .rest-page .swagger-ui .info { margin-block: 24px; }
+    .rest-page .swagger-ui .info .title { font-size: 28px; }
+
+    /* GraphiQL 3 splits the editor and response horizontally by default. */
+    #graphiql .graphiql-main { flex-direction: column; min-width: 0; overflow: auto; }
+    #graphiql .graphiql-sessions { min-height: 500px; min-width: 0; overflow: visible; }
+    #graphiql .graphiql-session-header { min-height: 36px; }
+    #graphiql .graphiql-session { flex-direction: column; min-width: 0; gap: 8px; }
+    #graphiql .graphiql-editors {
+        width: 100% !important;
+        min-width: 0;
+        min-height: 225px;
+        flex: 1 0 225px;
+        margin: 0;
+    }
+    #graphiql .graphiql-query-editor { min-height: 0; }
+    #graphiql .graphiql-editor-tool:not(.hidden):has(> .graphiql-editor:not(.hidden)) {
+        min-height: 96px;
+    }
+    #graphiql .graphiql-horizontal-drag-bar { display: none !important; }
+    #graphiql .graphiql-response {
+        width: 100%;
+        min-height: 185px;
+        flex: 1 0 185px;
+        overflow: auto;
+        border-top: 1px solid currentColor;
+    }
+}
