@@ -63,7 +63,33 @@ try {
   const stale=await mf.dispatchFetch("https://api.test/history/releases?after="+encodeURIComponent(
     btoa(JSON.stringify(["f".repeat(24),"","x"]))));
   assert.equal(stale.status,409);
-  console.log("D1/R2 local runtime passed: 237 releases, GraphQL, nested patches, chunked Unicode documents, generation cursor.");
+
+  const manifestPath="https://api.test/catalog/data/manifest.json";
+  const first=await mf.dispatchFetch(manifestPath);
+  assert.equal(first.status,200);
+  assert.deepEqual(await first.json(),f.old.manifest);
+  const etag=first.headers.get("ETag");
+  assert.equal((await mf.dispatchFetch(manifestPath,{headers:{"If-None-Match":"W/"+etag}})).status,304);
+  const next="e".repeat(24),keyNext="generations/next.json";
+  const document=JSON.parse(f.objects.get("generations/test.json"));
+  document.manifest.generation=next;
+  document.manifest.snapshot="snapshots/"+next;
+  document.padding="x".repeat(9*1024*1024);
+  await bucket.put(keyNext,JSON.stringify(document));
+  await db.prepare("INSERT INTO catalog_generations VALUES(2,?,?,'ready','now')")
+    .bind(next,keyNext).run();
+  await db.prepare("UPDATE catalog_state SET active_seq=2").run();
+  const rotated=await mf.dispatchFetch(manifestPath,{headers:{"If-None-Match":etag}});
+  assert.equal(rotated.status,200);
+  assert.equal(rotated.headers.get("X-Catalog-Generation"),next);
+  assert.deepEqual(await rotated.json(),document.manifest);
+  // A GET miss should reuse resolved isolate data across actual Worker requests.
+  await bucket.delete(keyNext);
+  assert.equal((await request("/health?after-manifest=1")).generation,next);
+  await bucket.put(keyNext,JSON.stringify(document));
+  assert.deepEqual(await request("/catalog/data/snapshots/"+f.old.manifest.generation+"/sources.json"),
+    JSON.parse(f.old.bodies["sources.json"]));
+  console.log("D1/R2 local runtime passed: REST, GraphQL, chunked documents, generation cursors, manifest rotation and historical snapshots.");
 } finally {
   f.sqlite.close();
   await mf.dispose();

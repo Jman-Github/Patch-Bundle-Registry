@@ -2970,11 +2970,6 @@
     "integrations": false,
     "disabled": false
   },
-  "gphotos-custom-branding": {
-    "patches": "https://github.com/mian196/GPhotos-custom-branding",
-    "integrations": false,
-    "disabled": false
-  },
   "meowdoku-patches": {
     "patches": "https://github.com/TheDefaultState/meowdoku-patches",
     "integrations": false,
@@ -3157,11 +3152,6 @@
   },
   "hxdes08-samsung-notes-patch": {
     "patches": "https://github.com/hxdes08/hxdes08_samsung_notes_patch",
-    "integrations": false,
-    "disabled": false
-  },
-  "kageroll": {
-    "patches": "https://github.com/Ikuradachi/Kageroll",
     "integrations": false,
     "disabled": false
   },
@@ -3947,6 +3937,11 @@
   },
   "nagol12344-patch": {
     "patches": "https://github.com/Nagol12344/patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "hatena-bookmark-hide-pr-patches": {
+    "patches": "https://github.com/rikunode/hatena-bookmark-hide-pr-patches",
     "integrations": false,
     "disabled": false
   }

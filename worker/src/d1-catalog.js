@@ -25,6 +25,19 @@ class Unsupported extends CatalogError {
 }
 
 const documentCaches = new WeakMap();
+const MAX_CACHED_DOCUMENT_BYTES = 12 * 1024 * 1024;
+
+export async function readCatalogDocument(object, generation) {
+  let stored;
+  try { stored = await object.json(); }
+  catch { throw new CatalogError("Catalog snapshot unreadable",503); }
+  if (stored?.manifest?.generation !== generation)
+    throw new CatalogError("Catalog generation mismatch",503);
+  const {manifest, files} = stored;
+  if ([manifest.files, files].some(index => !index || typeof index !== "object" || Array.isArray(index)))
+    throw new CatalogError("Catalog file index unavailable",503);
+  return {manifest, files};
+}
 
 export class D1Catalog extends Catalog {
   constructor(env, {cacheDocuments = false} = {}) {
@@ -49,48 +62,59 @@ export class D1Catalog extends Catalog {
       return wrapper;
     }};
   }
-  async initialize() {
+  async activeGeneration() {
     const active = await this.db.prepare(
-      "SELECT g.* FROM catalog_state s JOIN catalog_generations g ON g.seq=s.active_seq " +
+      "SELECT g.seq,g.generation,g.manifest_key FROM catalog_state s JOIN catalog_generations g ON g.seq=s.active_seq " +
       "WHERE s.id=1 AND g.status='ready'").first();
     if (!active) throw new CatalogError("D1 catalog has not been imported", 503);
-    const load = async () => {
-      const object = await this.env.ARCHIVE.get(active.manifest_key);
-      if (!object) throw new CatalogError("Catalog snapshot unavailable",503);
-      const document = await object.json();
-      if (document.manifest.generation !== active.generation)
-        throw new CatalogError("Catalog generation mismatch",503);
-      return document;
-    };
-    if (this.cacheDocuments) {
-      let cache = documentCaches.get(this.env.ARCHIVE);
-      if (!cache) documentCaches.set(this.env.ARCHIVE,cache=new Map());
-      const key = active.generation + ":" + active.manifest_key;
-      if (!cache.has(key)) {
-        if (cache.size >= 2) cache.delete(cache.keys().next().value);
-        const pending = load();
-        cache.set(key,pending);
-        pending.then(document=>{
-          // Bound retained manifests by bytes as well as entry count.
-          if (new TextEncoder().encode(JSON.stringify(document)).length > 8*1024*1024 && cache.get(key)===pending) cache.delete(key);
-        },()=>{if (cache.get(key)===pending) cache.delete(key);});
-      }
-      this.document = await cache.get(key);
-    } else this.document = await load();
-    this.manifest = this.document.manifest;
-    if (this.manifest.generation !== active.generation)
-      throw new CatalogError("Catalog generation mismatch", 503);
     if (!Number.isSafeInteger(active.seq) || active.seq < 1)
       throw new CatalogError("Invalid catalog sequence",503);
+    return active;
+  }
+
+  async initialize(active) {
+    active ??= await this.activeGeneration();
+    const archive = this.env.ARCHIVE;
+    const key = active.generation + ":" + active.manifest_key;
+    let entry;
+    if (this.cacheDocuments) {
+      entry = documentCaches.get(archive);
+      if (entry?.key !== key) {
+        entry = {key};
+        documentCaches.set(archive, entry);
+      }
+    }
+    if (entry?.document) {
+      this.document = entry.document;
+    } else {
+      const object = await archive.get(active.manifest_key);
+      if (!object) throw new CatalogError("Catalog snapshot unavailable",503);
+      this.document = await readCatalogDocument(object,active.generation);
+      // Share only resolved data between requests. Keep one ready document per
+      // binding, bounded by its stored size, without retaining publication metadata.
+      if (entry && object.size <= MAX_CACHED_DOCUMENT_BYTES) entry.document = this.document;
+    }
+    this.manifest = this.document.manifest;
     this.seq = active.seq;
     return this;
   }
+
+  fileDigest(document, name) {
+    const digest = document.files[name];
+    const metadata = document.manifest.files;
+    if (typeof digest === "string" && /^[a-f0-9]{64}$/.test(digest) &&
+        (!Object.hasOwn(metadata,name) || digest === metadata[name]?.sha256))
+      return digest;
+    const archive = this.env.ARCHIVE;
+    if (documentCaches.get(archive)?.document === document) documentCaches.delete(archive);
+    throw new CatalogError("Catalog file index mismatch",503);
+  }
+
   visible(alias) { return alias + ".from_seq<=" + this.seq +
     " AND (" + alias + ".to_seq IS NULL OR " + alias + ".to_seq>" + this.seq + ")"; }
   async file(name) {
     if (!this.loaded.has(name)) this.loaded.set(name, (async () => {
-      const digest = this.document.files[name];
-      if (!/^[a-f0-9]{64}$/.test(digest ?? "")) throw new CatalogError("Unknown catalog index", 503);
+      const digest = this.fileDigest(this.document,name);
       const metadata = this.manifest.files[name];
       this.requests++;
       this.bytes += metadata?.bytes ?? 0;

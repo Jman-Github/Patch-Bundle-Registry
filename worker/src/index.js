@@ -1,6 +1,6 @@
 import { browseApps } from "./d1-apps.js";
 import site from "../../config/site.json" with { type: "json" };
-import { D1Catalog } from "./d1-catalog.js";
+import { D1Catalog, readCatalogDocument } from "./d1-catalog.js";
 import { Catalog, CatalogError, bundleImages, canonicalBundleType, catalogOrigins, compareReleaseDates, normalizeSource, pagination, selectRows } from "../../shared/catalog.js";
 import { filterApps } from "../../shared/apps.js";
 import { latestReleaseIds } from "../../shared/site.js";
@@ -35,11 +35,15 @@ async function limitedText(response, maximum) {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   return new TextDecoder().decode(bytes);
 }
-function corsHeaders(request, env) {
-  const allowed = (env.CORS_ORIGINS ?? site.website).split(",").map(s => s.trim());
+function allowedCorsOrigin(request, env) {
   const origin = request.headers.get("Origin");
+  const allowed = (env.CORS_ORIGINS ?? site.website).split(",").map(s => s.trim());
+  return origin && allowed.includes(origin) ? origin : null;
+}
+function corsHeaders(request, env) {
+  const origin = allowedCorsOrigin(request, env);
   const headers = { "Vary": "Origin", "Access-Control-Expose-Headers": "ETag, X-Catalog-Generation" };
-  if (origin && allowed.includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  if (origin) headers["Access-Control-Allow-Origin"] = origin;
   return headers;
 }
 function matchesEtag(request, etag) {
@@ -549,14 +553,15 @@ async function rest(catalog, url, env = {}) {
   }
   throw new CatalogError("Endpoint not found", 404);
 }
+function createD1Catalog(env, context) {
+  if (!env.DB || !env.ARCHIVE) throw new CatalogError("D1/R2 bindings are required",503);
+  const catalog = new D1Catalog(env,{cacheDocuments:Boolean(context?.waitUntil)});
+  catalog.regexLocale = env.POSTGRES_LOCALE ?? site.postgres_locale;
+  if (env.REFRESH_STATUS || env.JOBS_FETCH) catalog.liveJobs = () => liveJobs(env);
+  return catalog;
+}
 async function createCatalog(env, context) {
-  if (env.CATALOG_BACKEND === "d1") {
-    if (!env.DB || !env.ARCHIVE) throw new CatalogError("D1/R2 bindings are required",503);
-    const catalog = await new D1Catalog(env,{cacheDocuments:Boolean(context?.waitUntil)}).initialize();
-    catalog.regexLocale = env.POSTGRES_LOCALE ?? site.postgres_locale;
-    if (env.REFRESH_STATUS || env.JOBS_FETCH) catalog.liveJobs = () => liveJobs(env);
-    return catalog;
-  }
+  if (env.CATALOG_BACKEND === "d1") return createD1Catalog(env,context).initialize();
   const base = env.DATA_BASE_URL ?? site.website + "/" + site.database_path + "/";
   const parsedBase = new URL(base);
   if (parsedBase.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(parsedBase.hostname))
@@ -645,43 +650,67 @@ export default {
           selectRows(rows,restArgs(url.searchParams,["id","status","started_at","completed_at"]));
         return jsonResponse(request,env,dto,running ? 202 : 200,undefined,false);
       }
-      const catalog = await createCatalog(env,context);
-      generation = catalog.manifest.generation;
-      if (catalog.document && url.pathname.startsWith("/catalog/data/")) {
-        if (url.pathname === "/catalog/data/manifest.json")
-          return manifestResponse(request,env,catalog.manifest);
+      const d1 = env.CATALOG_BACKEND === "d1" ? createD1Catalog(env,context) : null;
+      const active = d1 && await d1.activeGeneration();
+      const fallback = d1 ? null : await createCatalog(env,context);
+      generation = active?.generation ?? fallback.manifest.generation;
+      const catalogData = d1 && url.pathname.startsWith("/catalog/data/");
+      const manifest = catalogData && url.pathname === "/catalog/data/manifest.json";
+      const snapshot = catalogData && !manifest;
+
+      // Check the ready generation on the D1 primary before reusing a completed
+      // response. A cache hit needs neither the R2 index nor query execution.
+      const responseCache = !snapshot && request.method === "GET" && context?.waitUntil ?
+        globalThis.caches?.default : null;
+      let responseKey;
+      if (responseCache) {
+        const cacheUrl = new URL(url);
+        if (manifest) cacheUrl.search = "";
+        cacheUrl.searchParams.set("__catalog_generation",generation);
+        cacheUrl.searchParams.set("__catalog_origin",allowedCorsOrigin(request,env) ?? "");
+        responseKey = new Request(cacheUrl);
+        const cached = await responseCache.match(responseKey).catch(() => undefined);
+        if (cached) {
+          if (matchesEtag(request, cached.headers.get("ETag")))
+            return new Response(null, {status:304,headers:cached.headers});
+          return cached;
+        }
+      }
+
+      if (snapshot) {
         const match = url.pathname.match(/^\/catalog\/data\/snapshots\/([a-f0-9]{24})\/(.+)$/);
         if (!match) throw new CatalogError("Catalog file not found",404);
-        let document = catalog.document;
-        if (match[1] !== generation) {
-          const row = await catalog.db.prepare("SELECT manifest_key FROM catalog_generations WHERE generation=? AND status='ready'").bind(match[1]).first();
-          const stored = row && await env.ARCHIVE.get(row.manifest_key);
-          if (!stored) throw new CatalogError("Catalog generation unavailable",404);
-          document = await stored.json();
+        const [, requestedGeneration, name] = match;
+        let document;
+        if (requestedGeneration === generation) {
+          document = (await d1.initialize(active)).document;
+        } else {
+          const row = await d1.db.prepare(
+            "SELECT manifest_key FROM catalog_generations WHERE generation=? AND status='ready'"
+          ).bind(requestedGeneration).first();
+          if (!row) throw new CatalogError("Catalog generation unavailable",404);
+          const stored = await env.ARCHIVE.get(row.manifest_key);
+          if (!stored) throw new CatalogError("Catalog snapshot unavailable",503);
+          document = await readCatalogDocument(stored,requestedGeneration);
         }
-        const name = match[2];
         if (!Object.hasOwn(document.manifest.files,name)) throw new CatalogError("Catalog file not found",404);
-        const object = await env.ARCHIVE.get("objects/"+document.files[name]);
+        const digest = d1.fileDigest(document,name);
+        const object = await env.ARCHIVE.get("objects/"+digest);
         if (!object) throw new CatalogError("Catalog object unavailable",503);
         const headers = {...corsHeaders(request,env),"Content-Type":"application/json",
-          "Cache-Control":"public,max-age=31536000,immutable","ETag":'"'+document.files[name]+'"',
-          "X-Catalog-Generation":match[1],"X-Content-Type-Options":"nosniff"};
+          "Cache-Control":"public,max-age=31536000,immutable","ETag":'"'+digest+'"',
+          "X-Catalog-Generation":requestedGeneration,"X-Content-Type-Options":"nosniff"};
         if (matchesEtag(request, headers.ETag))
           return new Response(null,{status:304,headers});
         return new Response(object.body ?? JSON.stringify(await object.json()),{headers});
       }
-      // Cache completed GET responses by immutable generation and origin. Publication
-      // changes the key immediately; conditional requests reuse the stored ETag.
-      const responseCache = request.method === "GET" && context?.waitUntil ? globalThis.caches?.default : null;
-      const cacheUrl = new URL(request.url);
-      cacheUrl.searchParams.set("__catalog_generation",generation);
-      cacheUrl.searchParams.set("__catalog_origin",request.headers.get("Origin") ?? "");
-      const responseKey = new Request(cacheUrl);
-      const cached = responseCache && await responseCache.match(responseKey);
-      if (cached) {
-        if (matchesEtag(request, cached.headers.get("ETag")))
-          return new Response(null,{status:304,headers:cached.headers});
-        return cached;
+
+      const catalog = d1 ? await d1.initialize(active) : fallback;
+      if (manifest) {
+        const response = manifestResponse(request,env,catalog.manifest);
+        if (responseCache && response.status === 200)
+          context.waitUntil(responseCache.put(responseKey,response.clone()));
+        return response;
       }
       let result;
       if (graphql) {

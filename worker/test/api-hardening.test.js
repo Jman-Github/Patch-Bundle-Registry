@@ -99,6 +99,33 @@ test("Failed document reads are evicted and can retry",async()=>{
   } finally {f.sqlite.close();}
 });
 
+test("A repaired catalog file index is retried within the same generation",async()=>{
+  const f=d1Fixture();
+  try {
+    const key="generations/test.json";
+    const original=f.objects.get(key);
+    for(const missing of ["manifest.files","files"]) {
+      const broken=JSON.parse(original);
+      if (missing==="manifest.files") delete broken.manifest.files;
+      else delete broken.files;
+      f.objects.set(key,JSON.stringify(broken));
+      const archive={get:f.env.ARCHIVE.get};
+      const env={...f.env,ARCHIVE:archive};
+      const context={waitUntil(){}};
+      const request=()=>worker.fetch(new Request("https://api.test/catalog/data/manifest.json"),env,context);
+      const failure=await request();
+      assert.equal(failure.status,503);
+      assert.equal((await failure.json()).error,"Catalog file index unavailable");
+
+      f.objects.set(key,original);
+      const retry=await request();
+      assert.equal(retry.status,200);
+      assert.deepEqual(await retry.json(),f.old.manifest);
+    }
+    assert.deepEqual(f.reads,Array(4).fill(key));
+  } finally {f.sqlite.close();}
+});
+
 test("Bundle details recover from a changed generation once and retain all filters",async()=>{
   const source=readFileSync(new URL("../../web/app.js",import.meta.url),"utf8");
   const code=source.slice(source.indexOf("async function bundlePatches("),source.indexOf("\nasync function bundleChangelog("));

@@ -59,7 +59,7 @@ export function d1Fixture(historyCount = 0) {
   const env = {...old.env,CATALOG_BACKEND:"d1",DB:db,ARCHIVE:{async get(key) {
     reads.push(key);
     const body=objects.get(key);
-    return body==null?null:{async json(){return JSON.parse(body);}};
+    return body==null?null:{size:Buffer.byteLength(body),async json(){return JSON.parse(body);}};
   }}};
   const request = async path => {
     const response=await worker.fetch(new Request("https://api.test"+path),env);

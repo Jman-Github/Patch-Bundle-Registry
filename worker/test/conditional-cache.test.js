@@ -29,6 +29,86 @@ test("Conditional GET accepts weak tags, tag lists and wildcard on JSON and cata
   } finally {f.sqlite.close();}
 });
 
+test("Unreadable R2 catalog JSON produces a retryable response",async()=>{
+  const f=d1Fixture();
+  try {
+    const key="generations/test.json";
+    const original=f.objects.get(key);
+    const request=()=>worker.fetch(new Request("https://api.test/catalog/data/manifest.json"),f.env);
+    f.objects.set(key,"{");
+    const failure=await request();
+    assert.equal(failure.status,503);
+    assert.equal(failure.headers.get("Cache-Control"),"no-store");
+    assert.equal((await failure.json()).error,"Catalog snapshot unreadable");
+
+    f.objects.set(key,original);
+    const retry=await request();
+    assert.equal(retry.status,200);
+    assert.deepEqual(await retry.json(),f.old.manifest);
+  } finally {f.sqlite.close();}
+});
+
+test("Historical snapshot reads use only the requested ready generation",async()=>{
+  const f=d1Fixture();
+  try {
+    const historical="e".repeat(24),key="generations/historical.json";
+    const currentKey="generations/test.json";
+    const document=JSON.parse(f.objects.get(currentKey));
+    f.objects.delete(currentKey);
+    const request=()=>worker.fetch(new Request(
+      "https://api.test/catalog/data/snapshots/"+historical+"/sources.json"),f.env);
+    assert.equal((await request()).status,404);
+
+    f.sqlite.prepare("INSERT INTO catalog_generations VALUES(2,?,?,'ready','now')").run(historical,key);
+    const missing=await request();
+    assert.equal(missing.status,503);
+    assert.equal((await missing.json()).error,"Catalog snapshot unavailable");
+
+    f.objects.set(key,JSON.stringify(document));
+    const mismatch=await request();
+    assert.equal(mismatch.status,503);
+    assert.equal(mismatch.headers.get("Cache-Control"),"no-store");
+    assert.equal((await mismatch.json()).error,"Catalog generation mismatch");
+    assert.deepEqual(f.reads,[key,key]);
+
+    document.manifest.generation=historical;
+    document.manifest.snapshot="snapshots/"+historical;
+    f.objects.set(key,JSON.stringify(document));
+    const repaired=await request();
+    assert.equal(repaired.status,200);
+    assert.equal(repaired.headers.get("X-Catalog-Generation"),historical);
+    assert.match(repaired.headers.get("Cache-Control"),/immutable/);
+    assert.deepEqual(await repaired.json(),JSON.parse(f.old.bodies["sources.json"]));
+    assert.deepEqual(f.reads,[key,key,key,"objects/"+document.files["sources.json"]]);
+  } finally {f.sqlite.close();}
+});
+
+test("Snapshot file responses reject a mismatched R2 object mapping",async()=>{
+  const f=d1Fixture();
+  try {
+    const key="generations/test.json";
+    const original=f.objects.get(key);
+    const document=JSON.parse(original);
+    const path="/catalog/data/snapshots/"+document.manifest.generation+"/sources.json";
+    const context={waitUntil(){}};
+    const request=()=>worker.fetch(new Request("https://api.test"+path),f.env,context);
+
+    document.files["sources.json"]=document.files["bundles.json"];
+    f.objects.set(key,JSON.stringify(document));
+    const mismatch=await request();
+    assert.equal(mismatch.status,503);
+    assert.equal(mismatch.headers.get("Cache-Control"),"no-store");
+    assert.equal((await mismatch.json()).error,"Catalog file index mismatch");
+    assert.deepEqual(f.reads,[key]);
+
+    f.objects.set(key,original);
+    const repaired=await request();
+    assert.equal(repaired.status,200);
+    assert.equal(repaired.headers.get("ETag"),'"'+document.manifest.files["sources.json"].sha256+'"');
+    assert.deepEqual(await repaired.json(),JSON.parse(f.old.bodies["sources.json"]));
+  } finally {f.sqlite.close();}
+});
+
 test("Cached GET responses accept weak validators after proxy compression",async()=>{
   const f=d1Fixture(),original=globalThis.caches,stored=new Map(),pending=[];
   globalThis.caches={default:{async match(key){return stored.get(key.url)?.clone();},
@@ -41,5 +121,65 @@ test("Cached GET responses accept weak validators after proxy compression",async
     const response=await worker.fetch(new Request("https://api.test/health",{
       headers:{"If-None-Match":"W/"+initial.headers.get("ETag")}}),f.env,context);
     assert.equal(response.status,304);
+  } finally {globalThis.caches=original;f.sqlite.close();}
+});
+
+test("D1 cache hits skip R2 for API responses and the public manifest",async()=>{
+  const f=d1Fixture(),original=globalThis.caches,stored=new Map(),pending=[];
+  globalThis.caches={default:{async match(key){return stored.get(key.url)?.clone();},
+    async put(key,response){stored.set(key.url,response.clone());}}};
+  try {
+    const context={waitUntil:promise=>pending.push(promise)};
+    const key="generations/test.json";
+    const document=JSON.parse(f.objects.get(key));
+    // Keep the object above the isolate cache limit so R2 reads measure edge hits.
+    document.padding="x".repeat(12*1024*1024);
+    f.objects.set(key,JSON.stringify(document));
+    const origin=f.env.CORS_ORIGINS.split(",")[0].trim();
+    const current=document.manifest.generation;
+    const next="e".repeat(24);
+    const paths=["/health","/catalog/data/manifest.json"];
+    const request=(path,headers={Origin:origin})=>worker.fetch(
+      new Request("https://api.test"+path,{headers}),f.env,context);
+    const coldBodies=new Map();
+    for(const path of paths) {
+      const cold=await request(path);
+      assert.equal(cold.status,200);
+      const body=await cold.text();
+      coldBodies.set(path,body);
+      await Promise.all(pending);
+
+      const warm=await request(path);
+      assert.equal(warm.status,200);
+      assert.equal(warm.headers.get("Access-Control-Allow-Origin"),origin);
+      assert.equal(await warm.text(),body);
+      const conditional=await request(path,{Origin:origin,"If-None-Match":"W/"+cold.headers.get("ETag")});
+      assert.equal(conditional.status,304);
+      assert.equal(await conditional.text(),"");
+    }
+    assert.deepEqual(f.reads,[key,key]);
+    assert.equal(f.queryLog.filter(sql=>sql.includes("catalog_state")).length,6);
+
+    const other=await request(paths[1],{Origin:"https://other.test"});
+    assert.equal(other.headers.get("Access-Control-Allow-Origin"),null);
+    assert.equal(await other.text(),coldBodies.get(paths[1]));
+    await Promise.all(pending);
+    const sameManifest=await request(paths[1]+"?ignored=1",{Origin:"https://different.test"});
+    assert.equal(sameManifest.headers.get("Access-Control-Allow-Origin"),null);
+    assert.equal(await sameManifest.text(),coldBodies.get(paths[1]));
+    assert.deepEqual(f.reads,[key,key,key]);
+
+    document.manifest.generation=next;
+    f.objects.set("generations/next.json",JSON.stringify(document));
+    f.sqlite.prepare("INSERT INTO catalog_generations VALUES(2,?,'generations/next.json','ready','now')").run(next);
+    f.sqlite.exec("UPDATE catalog_state SET active_seq=2");
+    for(const path of paths) {
+      const rotated=await request(path,{"If-None-Match":'"manifest-'+current+'"',Origin:origin});
+      assert.equal(rotated.status,200);
+      assert.equal(rotated.headers.get("X-Catalog-Generation"),next);
+      assert.equal((await rotated.json()).generation,next);
+    }
+    assert.deepEqual(f.reads,[key,key,key,"generations/next.json","generations/next.json"]);
+    await Promise.all(pending);
   } finally {globalThis.caches=original;f.sqlite.close();}
 });

@@ -106,7 +106,7 @@ test("Current large catalog documents are retained by the bounded cache",async()
   const f=d1Fixture();
   try {
     const document=JSON.parse(f.objects.get("generations/test.json"));
-    document.padding="x".repeat(5*1024*1024);
+    document.padding="x".repeat(9*1024*1024);
     f.objects.set("generations/test.json",JSON.stringify(document));
     await new D1Catalog(f.env,{cacheDocuments:true}).initialize();
     await new D1Catalog(f.env,{cacheDocuments:true}).initialize();
@@ -132,7 +132,7 @@ test("Oversized catalog documents are not retained indefinitely",async()=>{
   const f=d1Fixture();
   try {
     const document=JSON.parse(f.objects.get("generations/test.json"));
-    document.padding="x".repeat(9*1024*1024);
+    document.padding="x".repeat(12*1024*1024);
     f.objects.set("generations/test.json",JSON.stringify(document));
     for(let i=0;i<2;i++) await new D1Catalog(f.env,{cacheDocuments:true}).initialize();
     assert.equal(f.reads.length,2);
