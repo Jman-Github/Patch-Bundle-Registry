@@ -2,9 +2,12 @@ import shlex
 from pathlib import Path
 
 import pytest
-from test_cloudflare_catalog import MemoryCloud, catalog
+from test_cloudflare_catalog import SOURCE, MemoryCloud, catalog
 
 from scripts import cloudflare_catalog as cloud
+from scripts.refresh_issues import record_issue
+from scripts.release_archive import reconcile_archive
+from scripts.source_policy import save_availability
 
 
 @pytest.fixture
@@ -49,15 +52,34 @@ def test_actual_deployment_command_checks_only_ready_metadata(deployment, monkey
     assert '"verification": "metadata-only"' in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("problem", ["incomplete", "inactive", "unready", "mismatch", "corrupt"])
+@pytest.mark.parametrize("upstream_error", ["403: Forbidden", "404: Not Found"])
+def test_deployment_accepts_ready_catalog_with_upstream_failure(
+    deployment, monkeypatch, capsys, upstream_error
+):
+    memory = deployment
+    inventory = {"demo": {"patches": SOURCE}, "empty": {"patches": "https://gitlab.com/team/empty"}}
+    save_availability(cloud.ROOT, {SOURCE: upstream_error})
+    reconcile_archive(cloud.ROOT, inventory, {"https://gitlab.com/team/empty": []})
+    record_issue(cloud.ROOT, SOURCE, "Release check", upstream_error)
+    memory.publish()
+    assert memory.document(memory.active())["complete"] is False
+
+    with monkeypatch.context() as strict:
+        strict.setattr("sys.argv", ["catalog", "verify", "--require-complete", "--metadata-only"])
+        with pytest.raises(ValueError, match="backfill is not complete"):
+            cloud.main()
+
+    forbid_full_audit(memory, monkeypatch)
+    cloud.main()
+    assert '"complete": false' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("problem", ["inactive", "unready", "mismatch", "corrupt"])
 def test_deployment_rejects_invalid_ready_metadata(deployment, monkeypatch, problem):
     memory = deployment
     active = memory.active()
     document = memory.document(active)
-    if problem == "incomplete":
-        document["complete"] = False
-        expected = "backfill is not complete"
-    elif problem in ("inactive", "unready"):
+    if problem in ("inactive", "unready"):
         if problem == "inactive":
             memory.sql("UPDATE catalog_state SET active_seq=NULL")
         else:

@@ -69,9 +69,9 @@ jobs:
         run: |
           test "$CONFIRMATION" = ACTIVATE
           python -m pip install -r requirements-cloudflare.txt
-          # Publication validates catalog data before marking a generation ready.
-          # Full R2/D1 audits remain available in Manage Cloudflare catalog.
-          python -m scripts.cloudflare_catalog verify --require-complete --metadata-only
+          # Refresh can mark a generation ready with recorded upstream failures.
+          # Deploy against the verified active generation even if backfill is incomplete.
+          python -m scripts.cloudflare_catalog verify --metadata-only
       - name: Check staging Access configuration
         if: inputs.target == 'staging'
         env:
