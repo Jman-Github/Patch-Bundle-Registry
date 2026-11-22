@@ -890,11 +890,6 @@
     "integrations": false,
     "disabled": false
   },
-  "riky": {
-    "patches": "https://github.com/riky-dev/morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "ipusnas": {
     "patches": "https://github.com/kuchingneko28/ipusnas-patches",
     "integrations": false,
@@ -1602,11 +1597,6 @@
   },
   "pixelboard": {
     "patches": "https://github.com/Akshayykadam/PixelBoard",
-    "integrations": false,
-    "disabled": false
-  },
-  "ck-zombies": {
-    "patches": "https://github.com/ComoEstaisAmigos/ck-zombies-morphe-patches",
     "integrations": false,
     "disabled": false
   },
@@ -3942,6 +3932,166 @@
   },
   "hatena-bookmark-hide-pr-patches": {
     "patches": "https://github.com/rikunode/hatena-bookmark-hide-pr-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sm-patches": {
+    "patches": "https://github.com/gitmyasm/SM-PATCHES",
+    "integrations": false,
+    "disabled": false
+  },
+  "gt-morphe-patches": {
+    "patches": "https://github.com/Gagan-Pratap-S/GT-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "rushiforai-testing": {
+    "patches": "https://github.com/rushiforai/testing",
+    "integrations": false,
+    "disabled": false
+  },
+  "tokudai-patches": {
+    "patches": "https://github.com/tokudai-vs/tokudai-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "deepfish-private-morphe-patches": {
+    "patches": "https://github.com/DeepFish-private/Morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "seamless-patches": {
+    "patches": "https://github.com/aeongdesu/seamless-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "futatabi": {
+    "patches": "https://github.com/rikunode/futatabi",
+    "integrations": false,
+    "disabled": false
+  },
+  "aare-patches": {
+    "patches": "https://github.com/Pirrotto/aare-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboardsamsung": {
+    "patches": "https://github.com/vortexnode/GboardSamsung",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-vix-patches": {
+    "patches": "https://github.com/stivencop414-bot/Morphe-Vix-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "merak-patches": {
+    "patches": "https://github.com/OmarBrbutovic/merak-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "0xjohnnyboy-morphe-patches": {
+    "patches": "https://github.com/0xJohnnyboy/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "smortthings": {
+    "patches": "https://github.com/neoKushan/smortthings",
+    "integrations": false,
+    "disabled": false
+  },
+  "httpinjectorpatches": {
+    "patches": "https://github.com/gitmyasm/HttpInjectorPatches",
+    "integrations": false,
+    "disabled": false
+  },
+  "nyandex": {
+    "patches": "https://github.com/Ser1-1y/nyandex",
+    "integrations": false,
+    "disabled": false
+  },
+  "myzong-patches": {
+    "patches": "https://github.com/FarhanZafarr-9/myzong-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "mindomopatches": {
+    "patches": "https://github.com/gitmyasm/MindomoPatches",
+    "integrations": false,
+    "disabled": false
+  },
+  "google-health-patches": {
+    "patches": "https://github.com/JoFSlash/google-health-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gitmyasm-patches": {
+    "patches": "https://github.com/gitmyasm/Patches-",
+    "integrations": false,
+    "disabled": false
+  },
+  "tx-public-patches": {
+    "patches": "https://github.com/xhyxfxxc/tx-public-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "realmelink-plus": {
+    "patches": "https://github.com/Rafaello0/RealmeLink-Plus",
+    "integrations": false,
+    "disabled": false
+  },
+  "spotify-scroll-lock-patches": {
+    "patches": "https://github.com/sujaan13/spotify-scroll-lock-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "vbook-patche": {
+    "patches": "https://github.com/HaoDH/vbook-patche",
+    "integrations": false,
+    "disabled": false
+  },
+  "chmate-ua-spoof-patches": {
+    "patches": "https://github.com/rikunode/chmate-ua-spoof-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "patapon888-morphe-patches": {
+    "patches": "https://github.com/patapon888/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "dusk-beep-morphe-patch": {
+    "patches": "https://github.com/dusk-beep/morphe-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-x-video-60fps": {
+    "patches": "https://github.com/ryuya0124/morphe-x-video-60fps",
+    "integrations": false,
+    "disabled": false
+  },
+  "ytm-ru-skippper": {
+    "patches": "https://github.com/diminDDL/ytm-ru-skippper",
+    "integrations": false,
+    "disabled": false
+  },
+  "opatches": {
+    "patches": "https://github.com/Sasha212015/opatches",
+    "integrations": false,
+    "disabled": false
+  },
+  "airplayty": {
+    "patches": "https://github.com/sharklatan/AirPlayTY",
+    "integrations": false,
+    "disabled": false
+  },
+  "tao-patches": {
+    "patches": "https://github.com/saigauthamr/tao-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "rudrakshrajpurohit417-sketch-rj-reseam-patches": {
+    "patches": "https://github.com/rudrakshrajpurohit417-sketch/RJ-reseam-patches",
     "integrations": false,
     "disabled": false
   }
