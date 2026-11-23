@@ -29,3 +29,4 @@ worker/.dev.vars
 worker/.dev.vars.*
 
 /internal/
+.vscode
