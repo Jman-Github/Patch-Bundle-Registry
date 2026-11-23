@@ -87,7 +87,9 @@ class Refresh:
         if self.cloudflare:
             from scripts.cloudflare_catalog import Cloud
 
-            Cloud().checkpoint()
+            # Publication and the final checkpoint handle orphan cleanup under
+            # the same workflow lock. Keep intermediate checkpoints lightweight.
+            Cloud().checkpoint(cleanup_obsolete=False)
             self.last_publish = time.monotonic()
             return
         build_database(self.root, restore=False)

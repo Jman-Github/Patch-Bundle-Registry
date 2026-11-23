@@ -373,10 +373,10 @@ class Cloud:
             | set(document.get("record_objects", []))
         )
 
-    def checkpoint(self):
+    def checkpoint(self, *, cleanup_obsolete=True):
         from scripts.cloudflare_checkpoint import save
 
-        save(self, ROOT)
+        save(self, ROOT, cleanup_obsolete=cleanup_obsolete)
 
     def restore_checkpoint(self):
         from scripts.cloudflare_checkpoint import restore
@@ -1032,13 +1032,18 @@ class Cloud:
                 raise ValueError("Snapshot record count or identity mismatch")
             external = set()
             for row in records:
+                if row["kind"] != "history_release":
+                    continue
                 body = encode(row["data"])
-                if row["kind"] == "history_release" and len(body) > 1_500_000:
-                    digest = hashlib.sha256(body).hexdigest()
-                    external.add(digest)
-                    self.verified_blob(digest, fresh=True)
-            if "record_objects" in document and set(document["record_objects"]) != external:
-                raise ValueError("External record object index mismatch")
+                if len(body) > 1_500_000:
+                    external.add(hashlib.sha256(body).hexdigest())
+            if "record_objects" in document:
+                # The fresh object audit above covered every digest in this index.
+                if set(document["record_objects"]) != external:
+                    raise ValueError("External record object index mismatch")
+            else:
+                # Legacy snapshots did not declare their external objects.
+                self.transfers().prefetch(external, fresh=True)
         return document
 
     def verify_database(self, sequence, document):

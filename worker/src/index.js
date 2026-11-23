@@ -12,6 +12,13 @@ export { RefreshStatus } from "./jobs.js";
 export { CatalogSubscriptions } from "./subscriptions.js";
 
 const MAX_RESPONSE = 2 * 1024 * 1024;
+const CATALOG_CACHE_CONTROL = "public, max-age=60";
+const encoder = new TextEncoder();
+
+async function sha256Hex(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+}
 async function limitedText(response, maximum) {
   if (+response.headers.get("content-length") > maximum)
     throw new CatalogError("Payload exceeds size limit", 413);
@@ -57,27 +64,30 @@ function matchesEtag(request, etag) {
   return tags.some(tag => opaque(tag) === opaque(etag));
 }
 async function jsonResponse(request, env, data, status, generation, cacheable = true) {
-  let body = JSON.stringify(data);
-  if (new TextEncoder().encode(body).length > MAX_RESPONSE) {
-    status = 422; body = JSON.stringify({ error: "Response too large; reduce the query limit", code: "response_too_large" });
+  const body = JSON.stringify(data);
+  const prefix = generation ?? "";
+  const prefixBytes = prefix.length ? encoder.encode(prefix).length : 0;
+  let bytes = encoder.encode(prefix + body);
+  if (bytes.length - prefixBytes > MAX_RESPONSE) {
+    status = 422;
+    bytes = encoder.encode(prefix + JSON.stringify({
+      error: "Response too large; reduce the query limit", code: "response_too_large"
+    }));
     cacheable = false;
   }
   const headers = { ...corsHeaders(request, env), "Content-Type": "application/json; charset=utf-8",
     "X-Content-Type-Options": "nosniff",
-    "Cache-Control": cacheable && status === 200 ? "public, max-age=60" : "no-store" };
+    "Cache-Control": cacheable && status === 200 ? CATALOG_CACHE_CONTROL : "no-store" };
   if (generation) headers["X-Catalog-Generation"] = generation;
-  const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256",
-    new TextEncoder().encode((generation ?? "") + body)))]
-    .map(n => n.toString(16).padStart(2, "0")).join("");
-  headers.ETag = '"' + hash + '"';
+  headers.ETag = '"' + await sha256Hex(bytes) + '"';
   if (status === 200 && matchesEtag(request, headers.ETag))
     return new Response(null, { status: 304, headers });
-  return new Response(body, { status, headers });
+  return new Response(body === undefined ? null : bytes.subarray(prefixBytes), { status, headers });
 }
 function manifestResponse(request, env, manifest) {
   // This immutable generation's file index is a static document, not a query page.
   const headers = { ...corsHeaders(request, env), "Content-Type": "application/json; charset=utf-8",
-    "X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=60",
+    "X-Content-Type-Options": "nosniff", "Cache-Control": CATALOG_CACHE_CONTROL,
     "X-Catalog-Generation": manifest.generation, "ETag": '"manifest-' + manifest.generation + '"' };
   if (matchesEtag(request, headers.ETag))
     return new Response(null, { status: 304, headers });
@@ -650,84 +660,110 @@ export default {
           selectRows(rows,restArgs(url.searchParams,["id","status","started_at","completed_at"]));
         return jsonResponse(request,env,dto,running ? 202 : 200,undefined,false);
       }
+      const post = graphql && request.method === "POST";
+      let postBody;
+      if (post) {
+        if (!request.headers.get("Content-Type")?.includes("application/json"))
+          throw new CatalogError("Expected application/json", 415);
+        postBody = await limitedText(request, 32768);
+      }
+
       const d1 = env.CATALOG_BACKEND === "d1" ? createD1Catalog(env,context) : null;
-      const active = d1 && await d1.activeGeneration();
-      const fallback = d1 ? null : await createCatalog(env,context);
-      generation = active?.generation ?? fallback.manifest.generation;
       const catalogData = d1 && url.pathname.startsWith("/catalog/data/");
       const manifest = catalogData && url.pathname === "/catalog/data/manifest.json";
       const snapshot = catalogData && !manifest;
+      const snapshotMatch = snapshot && url.pathname.match(/^\/catalog\/data\/snapshots\/([a-f0-9]{24})\/(.+)$/);
+      const active = d1 && await d1.activeGeneration(snapshotMatch?.[1]);
+      const fallback = d1 ? null : await createCatalog(env,context);
+      generation = active?.generation ?? fallback.manifest.generation;
 
       // Check the ready generation on the D1 primary before reusing a completed
       // response. A cache hit needs neither the R2 index nor query execution.
-      const responseCache = !snapshot && request.method === "GET" && context?.waitUntil ?
-        globalThis.caches?.default : null;
+      const publicRequest = !graphql || !["Authorization", "Cookie", "CF-Access-Jwt-Assertion"]
+        .some(header => request.headers.has(header));
+      const responseCache = !snapshot && publicRequest && (request.method === "GET" || (post && d1)) &&
+        context?.waitUntil ? globalThis.caches?.default : null;
       let responseKey;
       if (responseCache) {
         const cacheUrl = new URL(url);
-        if (manifest) cacheUrl.search = "";
+        if (manifest || post) cacheUrl.search = "";
+        // Keep POST bodies separate from caller-controlled GET parameters.
+        if (post) cacheUrl.searchParams.set("__catalog_body",await sha256Hex(encoder.encode(postBody)));
+        else cacheUrl.searchParams.delete("__catalog_body");
+        if (graphql) cacheUrl.searchParams.set("__catalog_graphql","v2");
         cacheUrl.searchParams.set("__catalog_generation",generation);
         cacheUrl.searchParams.set("__catalog_origin",allowedCorsOrigin(request,env) ?? "");
         responseKey = new Request(cacheUrl);
         const cached = await responseCache.match(responseKey).catch(() => undefined);
         if (cached) {
-          if (matchesEtag(request, cached.headers.get("ETag")))
-            return new Response(null, {status:304,headers:cached.headers});
+          const conditional = matchesEtag(request, cached.headers.get("ETag"));
+          if (manifest) {
+            const headers = new Headers(cached.headers);
+            headers.set("Cache-Control", CATALOG_CACHE_CONTROL);
+            // The edge entry is keyed by generation. Start the public TTL when served.
+            headers.delete("Age");
+            headers.delete("Date");
+            return new Response(conditional ? null : cached.body, {status: conditional ? 304 : 200, headers});
+          }
+          if (conditional) return new Response(null, {status:304,headers:cached.headers});
           return cached;
         }
       }
 
       if (snapshot) {
-        const match = url.pathname.match(/^\/catalog\/data\/snapshots\/([a-f0-9]{24})\/(.+)$/);
-        if (!match) throw new CatalogError("Catalog file not found",404);
-        const [, requestedGeneration, name] = match;
+        if (!snapshotMatch) throw new CatalogError("Catalog file not found",404);
+        const [, requestedGeneration, name] = snapshotMatch;
         let document;
         if (requestedGeneration === generation) {
           document = (await d1.initialize(active)).document;
         } else {
-          const row = await d1.db.prepare(
-            "SELECT manifest_key FROM catalog_generations WHERE generation=? AND status='ready'"
-          ).bind(requestedGeneration).first();
-          if (!row) throw new CatalogError("Catalog generation unavailable",404);
-          const stored = await env.ARCHIVE.get(row.manifest_key);
+          if (!active.requested_manifest_key) throw new CatalogError("Catalog generation unavailable",404);
+          const stored = await env.ARCHIVE.get(active.requested_manifest_key);
           if (!stored) throw new CatalogError("Catalog snapshot unavailable",503);
           document = await readCatalogDocument(stored,requestedGeneration);
         }
         if (!Object.hasOwn(document.manifest.files,name)) throw new CatalogError("Catalog file not found",404);
         const digest = d1.fileDigest(document,name);
-        const object = await env.ARCHIVE.get("objects/"+digest);
-        if (!object) throw new CatalogError("Catalog object unavailable",503);
+        const objectKey = "objects/" + digest;
         const headers = {...corsHeaders(request,env),"Content-Type":"application/json",
           "Cache-Control":"public,max-age=31536000,immutable","ETag":'"'+digest+'"',
           "X-Catalog-Generation":requestedGeneration,"X-Content-Type-Options":"nosniff"};
-        if (matchesEtag(request, headers.ETag))
+        const conditional = matchesEtag(request, headers.ETag);
+        if (conditional && env.ARCHIVE.head) {
+          if (!await env.ARCHIVE.head(objectKey)) throw new CatalogError("Catalog object unavailable",503);
           return new Response(null,{status:304,headers});
+        }
+        const object = await env.ARCHIVE.get(objectKey);
+        if (!object) throw new CatalogError("Catalog object unavailable",503);
+        if (conditional) return new Response(null,{status:304,headers});
         return new Response(object.body ?? JSON.stringify(await object.json()),{headers});
       }
 
       const catalog = d1 ? await d1.initialize(active) : fallback;
       if (manifest) {
         const response = manifestResponse(request,env,catalog.manifest);
-        if (responseCache && response.status === 200)
-          context.waitUntil(responseCache.put(responseKey,response.clone()));
+        if (responseCache && response.status === 200) {
+          const cached = new Response(response.clone().body, response);
+          cached.headers.set("Cache-Control", "public, max-age=900");
+          context.waitUntil(responseCache.put(responseKey,cached).catch(() => undefined));
+        }
         return response;
       }
       let result;
+      let cacheable = !graphql;
       if (graphql) {
-        let payload;
-        if (request.method === "POST") {
-          if (!request.headers.get("Content-Type")?.includes("application/json"))
-            throw new CatalogError("Expected application/json", 415);
-          payload = JSON.parse(await limitedText(request, 32768));
-        } else payload = { query: url.searchParams.get("query"),
+        const payload = post ? JSON.parse(postBody) : { query: url.searchParams.get("query"),
           variables: JSON.parse(url.searchParams.get("variables") ?? "{}"),
           operationName: url.searchParams.get("operationName") ?? undefined };
-        result = await runGraphQL(catalog, payload);
+        result = await runGraphQL(catalog, payload, {
+          onCacheableQuery: () => { cacheable = publicRequest; }
+        });
       } else result = await withPostgresLocale(catalog.regexLocale ?? "en_US.utf8",
         () => rest(catalog, url, env));
-      const response = await jsonResponse(request, env, result, 200, generation, !result.errors);
-      if (responseCache && response.status === 200 && !result.errors)
-        context.waitUntil(responseCache.put(responseKey,response.clone()));
+      cacheable &&= !result.errors;
+      const response = await jsonResponse(request, env, result, 200, generation, cacheable);
+      if (responseCache && response.status === 200 && cacheable)
+        context.waitUntil(responseCache.put(responseKey,response.clone()).catch(() => undefined));
       return response;
     } catch (error) {
       const status = error instanceof CatalogError ? error.status : error instanceof SyntaxError ? 400 : 503;

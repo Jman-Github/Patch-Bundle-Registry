@@ -80,6 +80,7 @@ test("Historical snapshot reads use only the requested ready generation",async()
     assert.match(repaired.headers.get("Cache-Control"),/immutable/);
     assert.deepEqual(await repaired.json(),JSON.parse(f.old.bodies["sources.json"]));
     assert.deepEqual(f.reads,[key,key,key,"objects/"+document.files["sources.json"]]);
+    assert.equal(f.queryLog.length,4);
   } finally {f.sqlite.close();}
 });
 
@@ -107,6 +108,28 @@ test("Snapshot file responses reject a mismatched R2 object mapping",async()=>{
     assert.equal(repaired.headers.get("ETag"),'"'+document.manifest.files["sources.json"].sha256+'"');
     assert.deepEqual(await repaired.json(),JSON.parse(f.old.bodies["sources.json"]));
   } finally {f.sqlite.close();}
+});
+
+test("Conditional snapshot requests check R2 metadata without fetching a body", async () => {
+  const f=d1Fixture();
+  try {
+    const calls=[];
+    f.env.ARCHIVE.head=async key => {
+      calls.push(key);
+      return f.objects.has(key) ? {key} : null;
+    };
+    const name="sources.json", generation=f.old.manifest.generation;
+    const digest=f.old.manifest.files[name].sha256;
+    const request=()=>worker.fetch(new Request("https://api.test/catalog/data/snapshots/"+generation+"/"+name,{
+      headers:{"If-None-Match":'W/"'+digest+'"'}
+    }),f.env);
+    const response=await request();
+    assert.equal(response.status,304);
+    assert.deepEqual(f.reads,["generations/test.json"]);
+    assert.deepEqual(calls,["objects/"+digest]);
+    f.objects.delete("objects/"+digest);
+    assert.equal((await request()).status,503);
+  } finally { f.sqlite.close(); }
 });
 
 test("Cached GET responses accept weak validators after proxy compression",async()=>{
@@ -152,11 +175,17 @@ test("D1 cache hits skip R2 for API responses and the public manifest",async()=>
       const warm=await request(path);
       assert.equal(warm.status,200);
       assert.equal(warm.headers.get("Access-Control-Allow-Origin"),origin);
+      assert.equal(warm.headers.get("Cache-Control"),"public, max-age=60");
       assert.equal(await warm.text(),body);
       const conditional=await request(path,{Origin:origin,"If-None-Match":"W/"+cold.headers.get("ETag")});
       assert.equal(conditional.status,304);
       assert.equal(await conditional.text(),"");
     }
+    assert.equal(
+      [...stored.values()].find(response => response.headers.get("ETag") === '"manifest-'+current+'"')
+        .headers.get("Cache-Control"),
+      "public, max-age=900"
+    );
     assert.deepEqual(f.reads,[key,key]);
     assert.equal(f.queryLog.filter(sql=>sql.includes("catalog_state")).length,6);
 

@@ -234,7 +234,18 @@ def test_oversized_originals_verify_and_rebuild_from_r2(tmp_path, monkeypatch):
     assert json.loads(memory.get("objects/" + row["document_key"]))["changelog"].startswith(
         "Original 🌍"
     )
+    object_key = "objects/" + row["document_key"]
+    reads = []
+    transfers = memory.transfers()
+    get = transfers.get
+
+    def track_get(key):
+        reads.append(key)
+        return get(key)
+
+    monkeypatch.setattr(transfers, "get", track_get)
     memory.verify_document(document)
+    assert reads.count(object_key) == 1
     memory.verify_database(memory.active()["seq"], document)
     with pytest.raises(ValueError, match="REBUILD"):
         memory.rebuild(document, None)
@@ -303,7 +314,10 @@ def test_cloud_refresh_checkpoints_periodically_without_building_or_pushing(tmp_
     clock = [1000]
     monkeypatch.setattr(refresh, "time", SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(
-        cloud, "Cloud", lambda: SimpleNamespace(checkpoint=lambda: uploads.append(clock[0]))
+        cloud, "Cloud",
+        lambda: SimpleNamespace(
+            checkpoint=lambda *, cleanup_obsolete: uploads.append((clock[0], cleanup_obsolete))
+        ),
     )
     monkeypatch.setattr(
         refresh, "build_database", lambda *a, **k: pytest.fail("Cloud checkpoint rebuilt catalog")
@@ -316,7 +330,7 @@ def test_cloud_refresh_checkpoints_periodically_without_building_or_pushing(tmp_
     assert len(uploads) == 1
     clock[0] += 300
     state.checkpoint()
-    assert len(uploads) == 2
+    assert uploads == [(1000, False), (1302, False)]
 
 
 def test_cloudflare_retries_accept_second_or_date_retry_after(monkeypatch):

@@ -210,6 +210,37 @@ def test_mutable_proofs_do_not_rewrite_patch_lists_and_cleanup_bounds_storage(
     assert json.loads(proof.read_bytes()) == {"attempted_at": "4"}
 
 
+def test_intermediate_checkpoint_defers_listing_but_can_restore_latest_state(tmp_path, monkeypatch):
+    memory, folder = setup(tmp_path, monkeypatch)
+    memory.checkpoint()
+    previous = checkpoint.document(memory, tmp_path)
+    orphan = checkpoint.PREFIX + "f" * 64 + ".json.gz"
+    memory.objects[orphan] = b"interrupted upload"
+    (folder / "one.json").write_text('{"updated":true}')
+    listing = memory.s3.get_paginator
+
+    def unexpected_listing(*args, **kwargs):
+        pytest.fail("Intermediate checkpoint listed the bucket")
+
+    monkeypatch.setattr(memory.s3, "get_paginator", unexpected_listing)
+    memory.checkpoint(cleanup_obsolete=False)
+    memory.checkpoint(cleanup_obsolete=False)
+    current = checkpoint.document(memory, tmp_path)
+    obsolete = set(previous["blocks"].values()) - set(current["blocks"].values())
+    assert obsolete
+    for digest in obsolete:
+        assert checkpoint.PREFIX + digest + ".json.gz" in memory.objects
+        assert not memory.transfers().path(digest).exists()
+    assert orphan in memory.objects
+    (folder / "one.json").write_text("{}")
+    memory.restore_checkpoint()
+    assert json.loads((folder / "one.json").read_bytes()) == {"updated": True}
+
+    monkeypatch.setattr(memory.s3, "get_paginator", listing)
+    memory.checkpoint()
+    assert orphan not in memory.objects
+
+
 def test_orphan_cleanup_retries_without_touching_committed_checkpoint(tmp_path, monkeypatch):
     memory, folder = setup(tmp_path, monkeypatch)
     memory.checkpoint()

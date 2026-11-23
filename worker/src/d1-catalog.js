@@ -62,10 +62,14 @@ export class D1Catalog extends Catalog {
       return wrapper;
     }};
   }
-  async activeGeneration() {
-    const active = await this.db.prepare(
-      "SELECT g.seq,g.generation,g.manifest_key FROM catalog_state s JOIN catalog_generations g ON g.seq=s.active_seq " +
-      "WHERE s.id=1 AND g.status='ready'").first();
+  async activeGeneration(requestedGeneration) {
+    const select = "SELECT g.seq,g.generation,g.manifest_key";
+    const from = " FROM catalog_state s JOIN catalog_generations g ON g.seq=s.active_seq";
+    const where = " WHERE s.id=1 AND g.status='ready'";
+    const active = requestedGeneration ? await this.db.prepare(
+      select + ",r.manifest_key AS requested_manifest_key" + from +
+      " LEFT JOIN catalog_generations r ON r.generation=? AND r.status='ready'" + where
+    ).bind(requestedGeneration).first() : await this.db.prepare(select + from + where).first();
     if (!active) throw new CatalogError("D1 catalog has not been imported", 503);
     if (!Number.isSafeInteger(active.seq) || active.seq < 1)
       throw new CatalogError("Invalid catalog sequence",503);

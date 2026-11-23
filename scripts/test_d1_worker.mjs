@@ -89,7 +89,25 @@ try {
   await bucket.put(keyNext,JSON.stringify(document));
   assert.deepEqual(await request("/catalog/data/snapshots/"+f.old.manifest.generation+"/sources.json"),
     JSON.parse(f.old.bodies["sources.json"]));
-  console.log("D1/R2 local runtime passed: REST, GraphQL, chunked documents, generation cursors, manifest rotation and historical snapshots.");
+  // A large index bypasses the isolate cache. An identical POST can still
+  // succeed after removing the index, while a distinct POST needs R2.
+  const postGeneration="0123456789abcdef01234567",postKey="generations/post-cache.json";
+  document.manifest.generation=postGeneration;
+  document.manifest.snapshot="snapshots/"+postGeneration;
+  document.padding="x".repeat(12*1024*1024);
+  await bucket.put(postKey,JSON.stringify(document));
+  await db.prepare("INSERT INTO catalog_generations VALUES(3,?,?,'ready','now')")
+    .bind(postGeneration,postKey).run();
+  await db.prepare("UPDATE catalog_state SET active_seq=3").run();
+  const catalogQuery="{catalog_generation}";
+  assert.equal((await graph(catalogQuery)).catalog_generation,postGeneration);
+  await bucket.delete(postKey);
+  assert.equal((await graph(catalogQuery)).catalog_generation,postGeneration);
+  const distinct=await mf.dispatchFetch("https://api.test/graphql",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({query:"query Distinct {catalog_generation}"})});
+  assert.equal(distinct.status,503);
+  console.log("D1/R2 local runtime passed: REST, GraphQL POST caching, chunked documents, generation cursors, manifest rotation and historical snapshots.");
 } finally {
   f.sqlite.close();
   await mf.dispose();

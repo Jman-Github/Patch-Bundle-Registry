@@ -111,7 +111,7 @@ def block_cache(cloud):
     return cache
 
 
-def save(cloud, root):
+def save(cloud, root, *, cleanup_obsolete=True):
     previous = document(cloud, root)
     known = set(previous["blocks"].values()) if previous else set()
     paths = list((root / "internal/cache").rglob("*.json"))
@@ -154,7 +154,8 @@ def save(cloud, root):
         manifest = {"format_version": 3, "files": files, "blocks": blocks}
         if manifest == previous:
             print("Checkpoint unchanged; no uploads", flush=True)
-            cleanup(cloud, root)
+            if cleanup_obsolete:
+                cleanup(cloud, previous)
             return
         cache = block_cache(cloud)
         changed = {digest for digest in blocks.values() if digest not in known}
@@ -168,19 +169,21 @@ def save(cloud, root):
 
         cache.parallel(upload, sorted(blocks.items()))
         cloud.put(MANIFEST_KEY, encode(manifest))
-        cleanup(cloud, root)
+        if cleanup_obsolete:
+            cleanup(cloud, manifest)
+        elif previous:
+            # Defer R2 cleanup without growing the runner's local cache.
+            for digest in set(previous["blocks"].values()) - set(blocks.values()):
+                cache.path(digest).unlink(missing_ok=True)
         print(f"Checkpoint: {len(files)} files, {len(changed)} changed blocks uploaded", flush=True)
 
 
-def cleanup(cloud, root):
+def cleanup(cloud, current):
     """Only a committed complete manifest makes old private blocks disposable.
 
     All checkpoint writers/readers run under the catalog-refresh workflow lock.
     Listing also removes leftovers from interrupted uploads on the next success.
     """
-    current = document(cloud, root)
-    if current is None:
-        return
     retained = {PREFIX + digest + ".json.gz" for digest in current["blocks"].values()}
     obsolete = []
     for page in cloud.s3.get_paginator("list_objects_v2").paginate(

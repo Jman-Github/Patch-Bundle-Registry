@@ -15,6 +15,8 @@ import { streamArguments, streamBatch } from "./streaming.js";
 import { bundleImages, CatalogError, compareValues, configureAggregateMatcher, configureCaseFolder, configureRegexMatcher, configureTextComparator, filterResult, matches, pagination, selectRows } from "../../shared/catalog.js";
 
 const regexContext = new AsyncLocalStorage();
+const validatedQueries = new Map();
+const MAX_VALIDATED_QUERIES = 64;
 const defaultComparator = createPostgresComparator(site.postgres_locale ?? "en_US.utf8");
 configureTextComparator((left,right) => (regexContext.getStore()?.compare ?? defaultComparator)(left,right));
 configureRegexMatcher((value, pattern, operator) =>
@@ -474,15 +476,34 @@ async function executeQuery(catalog, payload, options) {
     throw new CatalogError("Expected one GraphQL query object with optional variables and operationName");
   if (typeof payload.query !== "string" || payload.query.length > 20000)
     throw new CatalogError("GraphQL query must contain at most 20000 characters");
-  let document;
-  try { document = parse(payload.query, { maxTokens: 4000 }); }
-  catch (error) { throw new CatalogError(error.message); }
+  let validated = validatedQueries.get(payload.query);
+  let document = validated?.document;
+  if (!document) {
+    try { document = parse(payload.query, { maxTokens: 4000 }); }
+    catch (error) { throw new CatalogError(error.message); }
+  }
   const operation = getOperationAST(document, payload.operationName);
   if (!operation || (operation.operation !== "query" &&
       !(operation.operation === "subscription" && options.subscription)))
     throw new CatalogError("Only named or unambiguous read-only queries are supported");
-  const errors = validate(schema, document);
-  if (errors.length) return { errors: errors.map(e => ({ message: e.message })) };
+  if (!validated) {
+    const errors = validate(schema, document);
+    if (errors.length) return { errors: errors.map(e => ({ message: e.message })) };
+    let live = false;
+    visit(document, { Field(node) {
+      if (node.name.value === "refresh_jobs") live = true;
+    } });
+    validated = { document, live };
+    if (payload.query.length <= 4096) {
+      if (validatedQueries.size >= MAX_VALIDATED_QUERIES)
+        validatedQueries.delete(validatedQueries.keys().next().value);
+      validatedQueries.set(payload.query, validated);
+    }
+  } else {
+    validatedQueries.delete(payload.query);
+    validatedQueries.set(payload.query, validated);
+  }
+  if (operation.operation === "query" && !validated.live) options.onCacheableQuery?.();
   const variables = getVariableValues(schema, operation.variableDefinitions ?? [], payload.variables ?? {});
   if (variables.errors) return { errors: variables.errors.map(e => ({ message: e.message })) };
   enforceComplexity(document, operation, variables.coerced);
