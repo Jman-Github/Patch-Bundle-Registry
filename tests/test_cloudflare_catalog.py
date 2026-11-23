@@ -152,6 +152,30 @@ def test_incomplete_inventory_and_corrupt_backup_cannot_publish(tmp_path, monkey
         memory.verify_document(document)
 
 
+def test_incremental_publish_rejects_duplicate_previous_records(tmp_path, monkeypatch):
+    memory = MemoryCloud(tmp_path)
+    monkeypatch.setattr(cloud, "ROOT", tmp_path)
+    catalog(tmp_path)
+    memory.publish()
+    active = memory.active()
+    objects = set(memory.objects)
+    iter_records = memory.iter_records
+
+    def duplicate_record(document):
+        rows = iter_records(document)
+        first = next(rows)
+        yield first
+        yield from rows
+        yield {**first, "data": {**first["data"], "conflicting": True}}
+
+    monkeypatch.setattr(memory, "iter_records", duplicate_record)
+    with pytest.raises(ValueError, match="duplicate record identities"):
+        memory.publish()
+    assert memory.active() == active
+    assert memory.sql("SELECT * FROM catalog_generations") == [active]
+    assert set(memory.objects) == objects
+
+
 def test_publication_after_rollback_uses_newest_physical_versions(tmp_path, monkeypatch):
     memory = MemoryCloud(tmp_path)
     monkeypatch.setattr(cloud, "ROOT", tmp_path)
@@ -611,15 +635,14 @@ def test_reseam_internal_patches_are_superseded_and_never_retained(tmp_path, mon
         ],
     )
     first_gen = memory.active()["generation"]
-    original_read_records = memory.read_records
+    original_iter_records = memory.iter_records
 
-    def mock_read_records(doc):
-        rows = original_read_records(doc)
+    def mock_iter_records(doc):
+        yield from original_iter_records(doc)
         if doc["manifest"]["generation"] == first_gen:
-            return [*rows, internal_row]
-        return rows
+            yield internal_row
 
-    monkeypatch.setattr(memory, "read_records", mock_read_records)
+    monkeypatch.setattr(memory, "iter_records", mock_iter_records)
     archive(tmp_path, [release(1, body="New release notes")])
     memory.publish()
     records = memory.read_records(memory.document(memory.active()))

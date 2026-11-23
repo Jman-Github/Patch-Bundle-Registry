@@ -8,6 +8,7 @@ import os
 import random
 import re
 import ssl
+import sys
 import time
 from collections import Counter
 from contextlib import contextmanager
@@ -161,6 +162,10 @@ class Cloud:
                     if value != before.get(key, 0)
                 },
             }
+            if sys.platform == "linux":
+                import resource
+
+                result["peak_rss_kib"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
             self.publication_metrics = getattr(self, "publication_metrics", {})
             self.publication_metrics.setdefault("publication_phases", []).append(result)
             print(json.dumps({"cloudflare_phase": result}), flush=True)
@@ -593,12 +598,18 @@ class Cloud:
                 else self.document(tips[0]) if tips else None
             )
             known = self.object_digests(previous) if previous else set()
-            previous_records = self.read_records(previous) if previous else []
+            previous_data = {}
+            if previous:
+                for item in self.iter_records(previous):
+                    identity = (item["kind"], item["key"])
+                    if identity in previous_data:
+                        raise ValueError("Previous snapshot contains duplicate record identities")
+                    previous_data[identity] = item["data"]
         with self.phase("reconcile_records"):
             removed = {
-                (row["data"].get("url") or row["data"].get("source_url") or row["key"]).lower()
-                for row in previous_records
-                if row["kind"] in ("source", "history_source")
+                (row.get("url") or row.get("source_url") or key).lower()
+                for (kind, key), row in previous_data.items()
+                if kind in ("source", "history_source")
             } - configured
             # A newly verified JVM inventory is authoritative for the same bundle ID.
             # Historical retention must not resurrect exports now classified as helpers.
@@ -619,26 +630,22 @@ class Cloud:
                 )
             }
             superseded_patches, superseded_associations = set(), set()
-            for item in previous_records:
-                key = (item["kind"], item["key"])
+            for key, row in previous_data.items():
                 if key in records:
                     continue
                 if key[0] == "patch" and (
-                    item["data"]["bundle_id"] in public_inventories
-                    or is_internal_patch(item["data"])
+                    row["bundle_id"] in public_inventories or is_internal_patch(row)
                 ):
                     superseded_patches.add(key[1])
                 elif key[0] == "patch_package":
-                    patch = records.get(("patch", item["data"]["patch_id"]))
+                    patch = records.get(("patch", row["patch_id"]))
                     if patch is not None and patch["bundle_id"] in verified_inventories:
                         superseded_associations.add(key[1])
             # Retain upstream release deletions for configured (including disabled) sources.
             # Removing the source itself is an explicit purge.
-            for item in previous_records:
-                key = (item["kind"], item["key"])
+            for key, row in previous_data.items():
                 if key in records or key[0] == "refresh_jobs":
                     continue
-                row = item["data"]
                 if key[0] == "patch" and (key[1] in superseded_patches or is_internal_patch(row)):
                     continue
                 # Keep the new verified links, while retaining relationships for
@@ -654,18 +661,16 @@ class Cloud:
                 elif key[0] in ("bundle", "history_release"):
                     row = {**row, "is_latest": False, "availability": "unavailable", "channels": []}
                 records[key] = row
-            for item in previous_records:
-                key = (item["kind"], item["key"])
+            for key, row in previous_data.items():
                 if key[0] == "history_release" and key in records:
                     for field in ("bundle_ids", "runtimes", "bundle_types"):
                         records[key][field] = sorted(
-                            set(records[key].get(field, [])) | set(item["data"].get(field, []))
+                            set(records[key].get(field, [])) | set(row.get(field, []))
                         )
             records = filter_records(ROOT, reconcile_retained_records(records))
-            previous_map = {(item["kind"], item["key"]): item["data"] for item in previous_records}
-            for key, row in list(records.items()):
+            for key, row in records.items():
                 if key[0] == "bundle":
-                    old = previous_map.get(key)
+                    old = previous_data.get(key)
                     if old is not None and {
                         k: v for k, v in old.items() if k != "patch_refresh_attempted_at"
                     } == {
@@ -675,12 +680,14 @@ class Cloud:
                             row["patch_refresh_attempted_at"] = old["patch_refresh_attempted_at"]
                         else:
                             row.pop("patch_refresh_attempted_at", None)
-            exported = [
-                {"kind": kind, "key": key, "data": row}
-                for (kind, key), row in sorted(records.items())
-            ]
         with self.phase("upload_record_blocks"):
-            record_blocks = self.upload_records(exported, known)
+            record_blocks = self.upload_records(
+                (
+                    {"kind": kind, "key": key, "data": records[kind, key]}
+                    for kind, key in sorted(records)
+                ),
+                known,
+            )
             record_digest = hashlib.sha256(encode(record_blocks)).hexdigest()
             identity_digest = hashlib.sha256((ROOT / "database/ids.json").read_bytes()).hexdigest()
             generation = hashlib.sha256(
@@ -745,6 +752,11 @@ class Cloud:
         with self.phase("upload_generation_manifest"):
             manifest = {**manifest, "generation": generation, "snapshot": "snapshots/" + generation}
             manifest.pop("snapshot_ref", None)
+            history_records = [
+                {"kind": kind, "key": key, "data": row}
+                for (kind, key), row in records.items()
+                if kind in ("history_release", "history_source")
+            ]
             document = {
                 "manifest": manifest,
                 "base_generation": base_generation,
@@ -754,10 +766,13 @@ class Cloud:
                 "record_block_encoding": "gzip",
                 "record_objects": sorted(
                     {
-                        hashlib.sha256(encode(item["data"])).hexdigest()
-                        for item in exported
-                        if item["kind"] == "history_release"
-                        and len(encode(item["data"])) > 1_500_000
+                        hashlib.sha256(body).hexdigest()
+                        for body in (
+                            encode(item["data"])
+                            for item in history_records
+                            if item["kind"] == "history_release"
+                        )
+                        if len(body) > 1_500_000
                     }
                 ),
                 "ids": self.blob((ROOT / "database/ids.json").read_bytes(), known),
@@ -768,8 +783,9 @@ class Cloud:
                 "record_count": len(records),
             }
             document["refresh_inputs"] = self.blob(
-                self.refresh_archive(document, base, exported), known
+                self.refresh_archive(document, base, history_records), known
             )
+            del history_records
             manifest_key = "generations/" + generation + ".json"
             self.put(manifest_key, encode(document))
             self.sql(
@@ -779,21 +795,22 @@ class Cloud:
             )
         with self.phase("diff_d1_records"):
             pending_rows = []
-            prior = {
-                (item["kind"], item["key"]): record_hash(item["data"]) for item in previous_records
-            }
+            expired = sorted(key for key in previous_data if key not in records)
+            record_count = len(records)
             writes = 0
             changed_kinds, metadata_only = Counter(), Counter()
-            previous_data = {(item["kind"], item["key"]): item["data"] for item in previous_records}
             volatile = {
                 "checked_at",
                 "verified_at",
                 "last_verified_at",
                 "patch_refresh_attempted_at",
             }
-            for (kind, key), row in sorted(records.items()):
+            # Drop the old rows as they are compared, before the fresh R2 audit.
+            for kind, key in sorted(records):
+                row = records[kind, key]
+                old = previous_data.pop((kind, key), None)
                 digest = record_hash(row)
-                if prior.get((kind, key)) == digest:
+                if old is not None and record_hash(old) == digest:
                     continue
                 body = self.storage_row(kind, row, known)
                 if len(body.encode()) > 1_900_000:
@@ -801,11 +818,11 @@ class Cloud:
                 pending_rows.append((kind, key, seq, body, digest))
                 writes += 1
                 changed_kinds[kind] += 1
-                old = previous_data.get((kind, key))
                 if old is not None and {k: v for k, v in old.items() if k not in volatile} == {
                     k: v for k, v in row.items() if k not in volatile
                 }:
                     metadata_only[kind] += 1
+            del previous_data, records
         # JSON input uses one binding; each inserted row still runs the version-closing trigger.
         with self.phase("insert_d1_records"):
             if resume:
@@ -820,14 +837,14 @@ class Cloud:
         )
         print(json.dumps(self.publication_metrics), flush=True)
         with self.phase("expire_and_count_d1_records"):
-            self.expire_rows(seq, sorted(prior.keys() - records.keys()))
+            self.expire_rows(seq, expired)
             count_sql = (
                 "SELECT COUNT(*) AS n,COALESCE(SUM(from_seq=?),0) AS staged"
                 " FROM catalog_records WHERE from_seq<=?"
                 " AND (to_seq IS NULL OR to_seq>?)"
             )
             counts = self.sql(count_sql, [seq, seq, seq])[0]
-            if counts["n"] != len(records) or counts["staged"] != len(pending_rows):
+            if counts["n"] != record_count or counts["staged"] != len(pending_rows):
                 if not resume:
                     raise ValueError("D1 staged row count mismatch")
                 # Conditional upserts already compare every intended staged body
@@ -838,11 +855,12 @@ class Cloud:
                     "UPDATE catalog_records SET to_seq=NULL WHERE to_seq=?", [seq]
                 )
                 self.insert_rows(pending_rows)
-                self.expire_rows(seq, sorted(prior.keys() - records.keys()))
+                self.expire_rows(seq, expired)
                 counts = self.sql(count_sql, [seq, seq, seq])[0]
-                if counts["n"] != len(records) or counts["staged"] != len(pending_rows):
+                if counts["n"] != record_count or counts["staged"] != len(pending_rows):
                     raise ValueError("D1 staged row count mismatch")
             count = counts["n"]
+            del pending_rows, expired
         # Ready generations were verified before activation. Re-read only new blobs here;
         # the explicit verify/recovery operations still check every retained object.
         with self.phase("verify_new_objects"):
@@ -960,15 +978,16 @@ class Cloud:
         )
 
     def read_records(self, document):
+        return list(self.iter_records(document))
+
+    def iter_records(self, document):
         encoding = document.get("record_block_encoding", "json")
         if encoding not in ("json", "gzip"):
             raise ValueError("Unsupported record block encoding")
         self.transfers().prefetch(document["record_blocks"])
-        result = []
         for digest in document["record_blocks"]:
             body = self.verified_blob(digest)
-            result.extend(json.loads(gzip.decompress(body) if encoding == "gzip" else body))
-        return result
+            yield from json.loads(gzip.decompress(body) if encoding == "gzip" else body)
 
     def verify_document(self, document, skip_digests=(), *, metadata_only=False):
         record_digest = hashlib.sha256(encode(document["record_blocks"])).hexdigest()

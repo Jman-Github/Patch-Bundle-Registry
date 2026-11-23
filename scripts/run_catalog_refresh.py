@@ -239,8 +239,12 @@ class Refresh:
         wrapper = self.root / "bundle-parser" / ("gradlew.bat" if os.name == "nt" else "gradlew")
         if os.name != "nt":
             wrapper.chmod(wrapper.stat().st_mode | 0o111)
+        command = [str(wrapper), "--project-dir", "bundle-parser", "run"]
+        if self.cloudflare:
+            # Release the extraction JVM before the memory-intensive catalog build and publish.
+            command.append("--no-daemon")
         try:
-            self.phase("PATCHES", [str(wrapper), "--project-dir", "bundle-parser", "run"])
+            self.phase("PATCHES", command)
         finally:
             extraction_issues(self.root, self.jobs[1]["started_at"])
         subprocess.run(  # noqa: S603 -- fixed interpreter and local script
