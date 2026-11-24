@@ -3350,11 +3350,6 @@
     "integrations": false,
     "disabled": false
   },
-  "np-morphe-patches": {
-    "patches": "https://github.com/prtmN5H1/NP-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "kmmiio99o-reseam-patches": {
     "patches": "https://github.com/kmmiio99o/reseam-patches",
     "integrations": false,
