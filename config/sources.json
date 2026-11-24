@@ -820,11 +820,6 @@
     "integrations": false,
     "disabled": false
   },
-  "ftl": {
-    "patches": "https://github.com/BlazeFTL/FTL-Patches",
-    "integrations": false,
-    "disabled": false
-  },
   "braintropy": {
     "patches": "https://github.com/braiNtropy/braintropy-patches",
     "integrations": false,
@@ -2212,11 +2207,6 @@
   },
   "sabp-eppy": {
     "patches": "https://github.com/epabafree/sabp-eppy-patches",
-    "integrations": false,
-    "disabled": false
-  },
-  "facebook-lite-morphe": {
-    "patches": "https://github.com/BlazeFTL/FaceBook-Lite-Morphe",
     "integrations": false,
     "disabled": false
   },
