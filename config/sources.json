@@ -915,11 +915,6 @@
     "integrations": false,
     "disabled": false
   },
-  "kveld": {
-    "patches": "https://github.com/kveld9/kveld-morphe-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "anxy": {
     "patches": "https://github.com/anxyis/anxy-patches",
     "integrations": false,
@@ -1902,11 +1897,6 @@
   },
   "torbenstriegel": {
     "patches": "https://github.com/TorbenStriegel/morphe-patches-custom",
-    "integrations": false,
-    "disabled": false
-  },
-  "kveld-extra-morphe": {
-    "patches": "https://github.com/kveld9/kveld-extra-morphe-patches",
     "integrations": false,
     "disabled": false
   },
