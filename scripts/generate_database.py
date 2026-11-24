@@ -357,6 +357,48 @@ def restore_catalog_cache(root=ROOT):
     write_extraction_policy(root)
 
 
+def stable_refresh_attempts(output, previous_path, bundles, summaries):
+    """Keep published refresh-attempt times when nothing else in a bundle changed.
+
+    Every run records new extraction attempts. history.json keeps the fresh time for
+    the pipeline, but rewriting unchanged public bundle files made each publication
+    upload and verify about a thousand objects. D1 records already apply this rule.
+    """
+    field = "patch_refresh_attempted_at"
+    if not re.fullmatch(r"snapshots/[a-f0-9]{24}", previous_path or ""):
+        return bundles
+    # Detail files equal their bundles.json summary without detail_file. The
+    # summary index is part of every run's restored refresh inputs.
+    published = {
+        row["id"]: row
+        for row in read_json(output / previous_path / "bundles.json", [])
+        if isinstance(row, dict) and isinstance(row.get("id"), str)
+    }
+    summary_rows = {row["id"]: row for row in summaries}
+
+    def without(row, *extra):
+        return {key: value for key, value in row.items() if key not in (field, *extra)}
+
+    result = {}
+    for key, bundle in bundles.items():
+        result[key] = bundle
+        old = published.get(key)
+        if old is None or old.get(field) == bundle.get(field):
+            continue
+        if without(old, "detail_file") != without(bundle):
+            continue
+        # Copy, so history.json still records the fresh attempt time.
+        stable = without(bundle)
+        if field in old:
+            stable[field] = old[field]
+        result[key] = stable
+        if key in summary_rows:
+            summary_rows[key].pop(field, None)
+            if field in old:
+                summary_rows[key][field] = old[field]
+    return result
+
+
 def build_database(root=ROOT, *, restore=True):
     try:
         from scripts.source_cleanup import clean_inputs, clean_snapshots
@@ -1034,7 +1076,8 @@ def build_database(root=ROOT, *, restore=True):
             for key in source["bundles"]
             if key in bundles
         ]
-    files.update({f"bundles/{key}.json": value for key, value in bundles.items()})
+    published_details = stable_refresh_attempts(output, previous_path, bundles, summaries)
+    files.update({f"bundles/{key}.json": value for key, value in published_details.items()})
     index = {"packages": {}, "bundles": {}, "patch_ids": {}, "pages": []}
     # Two-character buckets prevent common trigrams from creating multi-MB
     # index files, while retaining deterministic shard lookup.
@@ -1315,7 +1358,10 @@ def build_database(root=ROOT, *, restore=True):
     if previous.get("generation") == generation and isinstance(reference, str):
         if re.fullmatch(r"[a-f0-9]{40}", reference):
             manifest["snapshot_ref"] = reference
-    plan = retention_plan(output, snapshot, previous_path)
+    # Match build_site: only the legacy backend copies snapshot folders into Pages.
+    plan = retention_plan(
+        output, snapshot, previous_path, published=os.environ.get("CATALOG_BACKEND") != "d1"
+    )
     ids_temp = output / "ids.tmp"
     ids_temp.write_bytes(encoded(identifiers))
     ids_temp.replace(output / "ids.json")

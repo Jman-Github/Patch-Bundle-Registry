@@ -46,6 +46,34 @@ D1_WRITE_BATCH_SIZE = 1000
 D1_CLEANUP_INTERVAL_SECONDS = 1.0
 
 
+def document_files(document):
+    """Return a generation's complete name-to-digest file index.
+
+    Compact generations store manifest digests once, in ``manifest.files``, and keep
+    only files outside the public manifest (such as ``history.json``) separately.
+    """
+    if "files" in document:
+        return document["files"]
+    files = {name: metadata["sha256"] for name, metadata in document["manifest"]["files"].items()}
+    extra = document.get("extra_files", {})
+    if set(extra) & set(files):
+        raise ValueError("Snapshot extra file index overlaps the manifest")
+    return {**files, **extra}
+
+
+def compact_file_index(files, manifest):
+    """Choose the generation document's file index format.
+
+    Manifest entries already carry each digest, so storing them twice doubles the
+    document every API isolate downloads and parses. Workers deployed before this
+    format cannot read it: enable it only after deploying the current Worker.
+    """
+    if os.environ.get("CATALOG_COMPACT_GENERATIONS") != "true":
+        return {"files": files}
+    extra = {name: digest for name, digest in files.items() if name not in manifest["files"]}
+    return {"extra_files": extra}
+
+
 def merge_ids(*registries):
     merged = {}
     for registry in registries:
@@ -306,10 +334,15 @@ class Cloud:
                     return
 
     def put(self, key, body):
+        expected = hashlib.md5(body, usedforsecurity=False).hexdigest()
         for attempt in range(5):
             try:
-                self.s3.put_object(Bucket=self.bucket, Key=key, Body=body)
-                return
+                response = self.s3.put_object(Bucket=self.bucket, Key=key, Body=body)
+                # R2 returns the stored bytes' MD5 as a single-part ETag. A match
+                # proves the upload without a billed read of the same object; any
+                # other ETag leaves the object to the normal download verification.
+                etag = str((response or {}).get("ETag", "")).strip('"').lower()
+                return etag == expected
             except Exception as error:
                 response = getattr(error, "response", {})
                 if not isinstance(response, dict):
@@ -366,7 +399,7 @@ class Cloud:
     @staticmethod
     def object_digests(document):
         return (
-            set(document["files"].values())
+            set(document_files(document).values())
             | set(document["record_blocks"])
             | {document["ids"]}
             | ({document["refresh_inputs"]} if document.get("refresh_inputs") else set())
@@ -384,6 +417,7 @@ class Cloud:
         restore(self, ROOT, merge_ids, clean_inputs)
 
     def download_catalog(self, document, refresh_inputs=False):
+        files = document_files(document)
         manifest = document["manifest"]
         identifiers = json.loads(self.verified_blob(document["ids"]))
         tips = self.sql(
@@ -400,8 +434,8 @@ class Cloud:
             return
         target = ROOT / "database" / manifest["snapshot"]
         target.mkdir(parents=True, exist_ok=True)
-        self.transfers().prefetch(document["files"].values())
-        for name, digest in document["files"].items():
+        self.transfers().prefetch(files.values())
+        for name, digest in files.items():
             path = (target / name).resolve()
             if not path.is_relative_to(target.resolve()):
                 raise ValueError("Unsafe snapshot path")
@@ -435,11 +469,12 @@ class Cloud:
         }
 
     def refresh_archive(self, document, base, records):
+        files = document_files(document)
         prefix = "database/" + document["manifest"]["snapshot"] + "/"
         entries = {
             prefix + name: (base / name).read_bytes()
             for name in REFRESH_FILES
-            if name in document["files"]
+            if name in files
         }
         entries["database/manifest.json"] = encode(document["manifest"])
         entries["database/ids.json"] = (ROOT / "database/ids.json").read_bytes()
@@ -450,6 +485,7 @@ class Cloud:
         return pack_refresh(entries, document["manifest"]["generation"])
 
     def refresh_entries(self, document):
+        files = document_files(document)
         manifest = document["manifest"]
         if (
             not re.fullmatch(r"[a-f0-9]{24}", manifest["generation"])
@@ -457,7 +493,7 @@ class Cloud:
         ):
             raise ValueError("Unsafe refresh snapshot path")
         prefix = "database/" + manifest["snapshot"] + "/"
-        required = {prefix + name for name in REFRESH_FILES if name in document["files"]}
+        required = {prefix + name for name in REFRESH_FILES if name in files}
         required |= {
             "database/manifest.json",
             "database/ids.json",
@@ -469,7 +505,7 @@ class Cloud:
             required | set(REFRESH_ROOT_FILES),
         )
         supplemental = {
-            prefix + name for name in ("bundles.json", "packages.json") if name in document["files"]
+            prefix + name for name in ("bundles.json", "packages.json") if name in files
         }
         if (
             not (required - supplemental) <= entries.keys()
@@ -479,11 +515,11 @@ class Cloud:
         # Initial compact archives omitted indexes needed by metadata refresh.
         # Fetch only those missing indexes and verify them against the generation.
         for name in supplemental - entries.keys():
-            entries[name] = self.verified_blob(document["files"][name[len(prefix) :]])
+            entries[name] = self.verified_blob(files[name[len(prefix) :]])
         for name, body in entries.items():
             if (
                 name.startswith(prefix)
-                and hashlib.sha256(body).hexdigest() != document["files"][name[len(prefix) :]]
+                and hashlib.sha256(body).hexdigest() != files[name[len(prefix) :]]
             ):
                 raise ValueError("Refresh archive snapshot integrity mismatch")
         if hashlib.sha256(entries["database/ids.json"]).hexdigest() != document["ids"]:
@@ -491,6 +527,7 @@ class Cloud:
         return entries
 
     def download_refresh_inputs(self, document, identifiers):
+        files = document_files(document)
         manifest = document["manifest"]
         if (
             not re.fullmatch(r"[a-f0-9]{24}", manifest["generation"])
@@ -503,9 +540,9 @@ class Cloud:
             print("Restoring compact generation-bound refresh inputs", flush=True)
         else:
             # Existing generations need no reseeding or republishing to use the fast path.
-            names = [name for name in REFRESH_FILES if name in document["files"]]
-            self.transfers().prefetch(document["files"][name] for name in names)
-            entries = {prefix + name: self.verified_blob(document["files"][name]) for name in names}
+            names = [name for name in REFRESH_FILES if name in files]
+            self.transfers().prefetch(files[name] for name in names)
+            entries = {prefix + name: self.verified_blob(files[name]) for name in names}
             entries["database/manifest.json"] = encode(manifest)
             entries["internal/cache/history/archive.json"] = encode(
                 self.history_archive(self.read_records(document))
@@ -761,7 +798,7 @@ class Cloud:
                 "manifest": manifest,
                 "base_generation": base_generation,
                 "identity_digest": identity_digest,
-                "files": files,
+                **compact_file_index(files, manifest),
                 "record_blocks": record_blocks,
                 "record_block_encoding": "gzip",
                 "record_objects": sorted(
@@ -865,7 +902,11 @@ class Cloud:
         # the explicit verify/recovery operations still check every retained object.
         with self.phase("verify_new_objects"):
             previous_digests = self.object_digests(previous) if previous else set()
-            self.verify_document(document, skip_digests=previous_digests)
+            # Objects whose upload ETag or remote comparison already proved their
+            # bytes need no second download. A first publication has no verified
+            # predecessor, so it keeps the full record count and identity checks.
+            confirmed = previous_digests | self.transfers().confirmed if previous else set()
+            self.verify_document(document, skip_digests=confirmed)
         # Atomic activation. The workflow concurrency group is the single-writer lock.
         with self.phase("activate_generation"):
             self.sql("UPDATE catalog_generations SET status='ready' WHERE seq=?", [seq])
@@ -966,9 +1007,26 @@ class Cloud:
         print(f"Purged removed sources; deleted {len(obsolete)} obsolete R2 objects")
 
     def upload_records(self, records, known):
+        records = list(records)
+        # A new release adds hundreds of patches and patch-package links. Hashing
+        # their own keys spread them across every block, so each publish rewrote
+        # most blocks. Keep each bundle's rows together instead.
+        patch_bundles = {
+            item["key"]: item["data"]["bundle_id"]
+            for item in records
+            if item["kind"] == "patch" and isinstance(item["data"].get("bundle_id"), str)
+        }
+
+        def locality(item):
+            if item["kind"] == "patch":
+                return item["data"].get("bundle_id") or item["key"]
+            if item["kind"] == "patch_package":
+                return patch_bundles.get(item["data"].get("patch_id")) or item["key"]
+            return item["key"]
+
         blocks = {}
         for item in records:
-            prefix = hashlib.sha256(item["key"].encode()).hexdigest()[:2]
+            prefix = hashlib.sha256(str(locality(item)).encode()).hexdigest()[:2]
             # Mutable timestamps/jobs must not rewrite unrelated patch relationships.
             blocks.setdefault((item["kind"], prefix), []).append(item)
         return self.transfers().parallel(
@@ -990,6 +1048,7 @@ class Cloud:
             yield from json.loads(gzip.decompress(body) if encoding == "gzip" else body)
 
     def verify_document(self, document, skip_digests=(), *, metadata_only=False):
+        files = document_files(document)
         record_digest = hashlib.sha256(encode(document["record_blocks"])).hexdigest()
         identity = [document["base_generation"], record_digest]
         if "identity_digest" in document:
@@ -1004,14 +1063,14 @@ class Cloud:
         from scripts.generate_database import encoded
 
         if (
-            hashlib.sha256(encoded(document["files"])).hexdigest()[:24]
+            hashlib.sha256(encoded(files)).hexdigest()[:24]
             != document["base_generation"]
         ):
             raise ValueError("Snapshot base integrity mismatch")
-        if set(document["files"]) != set(document["manifest"]["files"]) | {"history.json"}:
+        if set(files) != set(document["manifest"]["files"]) | {"history.json"}:
             raise ValueError("Snapshot file set mismatch")
         for name, metadata in document["manifest"]["files"].items():
-            if document["files"].get(name) != metadata["sha256"]:
+            if files.get(name) != metadata["sha256"]:
                 raise ValueError("Snapshot file index mismatch")
         if document.get("record_block_encoding", "json") not in ("json", "gzip"):
             raise ValueError("Unsupported record block encoding")

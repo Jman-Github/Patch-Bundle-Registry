@@ -1,4 +1,5 @@
 import {CatalogError, canonicalBundleType, selectRows} from "../../shared/catalog.js";
+import {catalogIdColumn} from "./d1-catalog.js";
 import {latestReleaseIds} from "../../shared/site.js";
 
 // App browsing reads filtered D1 relationships, never the full R2 bundle/app indexes.
@@ -104,7 +105,7 @@ export async function browseApps(catalog, params, args, packageName = null, bund
     const fields=["catalog_id","version","created_at","patch_count"];
     const projection="json_object("+fields.map(field=>"'"+field+"',json_extract(data,'$."+field+"')").join(",")+")";
     const candidates=(await catalog.db.prepare("SELECT "+projection+" AS data FROM catalog_records b WHERE kind='bundle' AND "+
-      catalog.visible("b")+" AND json_extract(data,'$.catalog_id') IN (SELECT value FROM json_each(?))")
+      catalog.visible("b")+" AND "+catalogIdColumn("bundle","b")+" IN (SELECT value FROM json_each(?))")
       .bind(JSON.stringify(ids)).all()).results.map(item=>{const row=JSON.parse(item.data);return {...row,id:row.catalog_id};});
     const page=selectRows(candidates,args);
     // Hydrate the selected page with one bundle batch and one source batch.

@@ -20,6 +20,11 @@ const col = (alias, field) => {
   if (!safe.test(field)) throw new CatalogError("Invalid query field");
   return "json_extract(" + alias + ".data,'$." + field + "')";
 };
+// These kinds store their public catalog ID as the primary-key record_key.
+// Matching the key column avoids scanning every visible row's JSON body.
+const keyedKinds = new Set(["source", "bundle", "patch"]);
+export const catalogIdColumn = (kind, alias) =>
+  keyedKinds.has(kind) ? alias + ".record_key" : col(alias, "catalog_id");
 class Unsupported extends CatalogError {
   constructor() {super("Historical query uses an unsupported filter or ordering; use equality, membership and numeric ordering",422);}
 }
@@ -33,10 +38,12 @@ export async function readCatalogDocument(object, generation) {
   catch { throw new CatalogError("Catalog snapshot unreadable",503); }
   if (stored?.manifest?.generation !== generation)
     throw new CatalogError("Catalog generation mismatch",503);
-  const {manifest, files} = stored;
+  // Compact generations omit the copy of manifest digests and list only extra files.
+  const {manifest} = stored;
+  const files = stored.files ?? stored.extra_files;
   if ([manifest.files, files].some(index => !index || typeof index !== "object" || Array.isArray(index)))
     throw new CatalogError("Catalog file index unavailable",503);
-  return {manifest, files};
+  return {manifest, files, compact: !stored.files};
 }
 
 export class D1Catalog extends Catalog {
@@ -104,8 +111,9 @@ export class D1Catalog extends Catalog {
   }
 
   fileDigest(document, name) {
-    const digest = document.files[name];
     const metadata = document.manifest.files;
+    const digest = document.compact && Object.hasOwn(metadata,name) ?
+      metadata[name]?.sha256 : document.files[name];
     if (typeof digest === "string" && /^[a-f0-9]{64}$/.test(digest) &&
         (!Object.hasOwn(metadata,name) || digest === metadata[name]?.sha256))
       return digest;
@@ -151,6 +159,8 @@ export class D1Catalog extends Catalog {
       } else {
         if (field.endsWith("_aggregate")) throw new Unsupported();
         const expression = col(alias, field);
+        // String IDs compare identically against record_key and use the primary key.
+        const keyed = field === "catalog_id" && keyedKinds.has(kind) ? alias + ".record_key" : null;
         for (const [op, value] of Object.entries(condition ?? {})) {
           if (op === "_is_null") terms.push(expression + (value ? " IS NULL" : " IS NOT NULL"));
           else if (op === "_in" || op === "_nin") {
@@ -158,7 +168,8 @@ export class D1Catalog extends Catalog {
             if (!value.length) terms.push(op === "_in" ? "0" : "1");
             else {
               bindings.push(...value.map(v => typeof v === "boolean" ? Number(v) : v));
-              terms.push(expression + (op === "_in" ? " IN (" : " NOT IN (") +
+              terms.push((keyed && value.every(v => typeof v === "string") ? keyed : expression) +
+                (op === "_in" ? " IN (" : " NOT IN (") +
                 value.map(() => "?").join(",") + ")");
             }
           } else if (["_eq", "_neq", "_gt", "_gte", "_lt", "_lte"].includes(op)) {
@@ -166,14 +177,15 @@ export class D1Catalog extends Catalog {
             if (typeof value === "string" && !["_eq", "_neq"].includes(op))
               throw new Unsupported();
             bindings.push(typeof value === "boolean" ? Number(value) : value);
-            terms.push(expression + ({_eq:"=",_neq:"<>",_gt:">",_gte:">=",_lt:"<",_lte:"<="}[op]) + "?");
+            const target = keyed && typeof value === "string" && ["_eq", "_neq"].includes(op) ? keyed : expression;
+            terms.push(target + ({_eq:"=",_neq:"<>",_gt:">",_gte:">=",_lt:"<",_lte:"<="}[op]) + "?");
           } else throw new Unsupported();
         }
       }
     }
     return terms.join(" AND ") || "1";
   }
-  order(args, alias = "r") {
+  order(args, alias = "r", kind = null) {
     const result = [];
     for (const order of Array.isArray(args.order_by) ? args.order_by : args.order_by ? [args.order_by] : []) {
       for (const [field, direction] of Object.entries(order)) {
@@ -184,7 +196,8 @@ export class D1Catalog extends Catalog {
         if (!/^(asc|desc)(_nulls_(first|last))?$/.test(direction)) throw new Unsupported();
         const descending = direction.startsWith("desc");
         const nulls = direction.endsWith("first") || direction === "desc" ? "FIRST" : "LAST";
-        result.push(col(alias, field) + (descending ? " DESC" : " ASC") + " NULLS " + nulls);
+        const column = field === "catalog_id" ? catalogIdColumn(kind, alias) : col(alias, field);
+        result.push(column + (descending ? " DESC" : " ASC") + " NULLS " + nulls);
       }
     }
     if (!result.length) result.push(col(alias,"id") + " ASC NULLS LAST");
@@ -267,9 +280,9 @@ export class D1Catalog extends Catalog {
     // Sort only record identities: retaining full JSON bodies up to a deep offset
     // exhausts D1's sorter memory. Load bodies after the requested page is known.
     const query = "SELECT r.data FROM (SELECT r.kind,r.record_key,r.from_seq FROM catalog_records r WHERE r.kind=? AND " +
-      this.visible("r") + " AND " + filter + " ORDER BY " + this.order(args) + " LIMIT ? OFFSET ?) AS page " +
+      this.visible("r") + " AND " + filter + " ORDER BY " + this.order(args, "r", kind) + " LIMIT ? OFFSET ?) AS page " +
       "CROSS JOIN catalog_records r ON r.kind=page.kind AND r.record_key=page.record_key AND r.from_seq=page.from_seq " +
-      "ORDER BY " + this.order(args);
+      "ORDER BY " + this.order(args, "r", kind);
     const result = await this.db.prepare(query).bind(...bindings, limit, offset).all();
     return result.results.map(item => ({ ...JSON.parse(item.data), __kind: kind, __archived:Boolean(args.include_archived) }));
   }
@@ -288,7 +301,7 @@ export class D1Catalog extends Catalog {
       throw new CatalogError("Invalid aggregate limit");
     if (args.offset != null && (!Number.isSafeInteger(args.offset) || args.offset < 0))
       throw new CatalogError("Invalid aggregate offset");
-    const window = inner + (constrained ? " ORDER BY " + this.order(args) + " LIMIT ? OFFSET ?" : "");
+    const window = inner + (constrained ? " ORDER BY " + this.order(args, "r", kind) + " LIMIT ? OFFSET ?" : "");
     if (constrained) bindings.push(args.limit ?? -1, args.offset ?? 0);
     const projected = columns.length ? "SELECT " + (countArgs.distinct ? "DISTINCT " : "") +
       columns.map((_,index)=>"v"+index).join(",") + " FROM ("+window+") WHERE " +
@@ -360,7 +373,7 @@ export class D1Catalog extends Catalog {
     const wanted=selected.data.map(row=>row.id);
     if (!wanted.length) return selected;
     const data=(await this.db.prepare("SELECT r.data FROM catalog_records r WHERE r.kind=? AND "+
-      this.visible("r")+" AND "+col("r","catalog_id")+" IN (SELECT value FROM json_each(?))")
+      this.visible("r")+" AND "+catalogIdColumn(kind,"r")+" IN (SELECT value FROM json_each(?))")
       .bind(kind,JSON.stringify(wanted)).all()).results;
     const rows=new Map(data.map(item=>{const row=JSON.parse(item.data);return [row.catalog_id,{...row,__kind:kind}];}));
     // The initial source scan already loaded these rows.
@@ -448,7 +461,7 @@ export class D1Catalog extends Catalog {
   async decoratePatches(ids) {
     if (!ids.length) return [];
     const raw=(await this.db.prepare("SELECT r.data FROM catalog_records r WHERE r.kind='patch' AND "+
-      this.visible("r")+" AND "+col("r","catalog_id")+" IN (SELECT value FROM json_each(?))")
+      this.visible("r")+" AND "+catalogIdColumn("patch","r")+" IN (SELECT value FROM json_each(?))")
       .bind(JSON.stringify(ids)).all()).results;
     const rows=new Map(raw.map(item=>{const row=JSON.parse(item.data);return [row.catalog_id,row];}));
     // Hydrate every referenced bundle and source in two batches instead of 2× page size.

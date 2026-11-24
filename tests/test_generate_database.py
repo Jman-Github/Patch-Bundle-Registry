@@ -460,6 +460,7 @@ def test_oversized_generation_keeps_published_manifest(tmp_path, monkeypatch):
 
     from scripts import snapshot_retention
 
+    monkeypatch.delenv("CATALOG_BACKEND", raising=False)
     folder = fixture(tmp_path)
     first = db.build_database(tmp_path)
     raw_path = folder / "demo-latest-patches-bundle.json"
@@ -470,6 +471,23 @@ def test_oversized_generation_keeps_published_manifest(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="publication budget"):
         db.build_database(tmp_path)
     assert db.read_json(tmp_path / "database/manifest.json") == first
+
+
+def test_d1_backend_builds_generations_larger_than_the_pages_budget(tmp_path, monkeypatch):
+    from scripts import snapshot_retention
+
+    monkeypatch.setenv("CATALOG_BACKEND", "d1")
+    folder = fixture(tmp_path)
+    first = db.build_database(tmp_path)
+    raw_path = folder / "demo-latest-patches-bundle.json"
+    raw = db.read_json(raw_path)
+    raw.update(version="v2", download_url="https://example.test/v2.rvp")
+    write(raw_path, raw)
+    monkeypatch.setattr(snapshot_retention, "MAX_SNAPSHOT_BYTES", 1)
+    current = db.build_database(tmp_path)
+    assert current["generation"] != first["generation"]
+    assert db.read_json(tmp_path / "database/manifest.json") == current
+    assert (tmp_path / "database" / first["snapshot"]).is_dir()
 
 
 def test_site_publishes_retained_catalog_files_without_private_build_data(tmp_path):

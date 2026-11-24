@@ -21,7 +21,14 @@ def snapshot_path(output, name):
     return target
 
 
-def retention_plan(output, current, previous):
+def retention_plan(output, current, previous, *, published=True):
+    """Choose local snapshot folders to keep.
+
+    The byte budget bounds snapshots that the legacy backend publishes to GitHub
+    Pages. With the D1 backend, R2 serves catalog data and the site copies no
+    snapshot folders, so only the current and previous generations are kept,
+    whatever their size.
+    """
     directory = output / "snapshots"
     available = {}
     for folder in directory.iterdir():
@@ -41,11 +48,14 @@ def retention_plan(output, current, previous):
                       key=lambda name: available[name].stat().st_mtime)
     lineage = list(dict.fromkeys([*fallback, *remembered]))
     lineage = [name for name in lineage if name != current] + [current]
-    sizes = {name: sum(path.stat().st_size for path in folder.rglob("*") if path.is_file())
-             for name, folder in available.items()}
     selected = {current}
     if previous in available:
         selected.add(previous)
+    if not published:
+        retained = [name for name in lineage if name in selected]
+        return retained, [name for name in available if name not in selected]
+    sizes = {name: sum(path.stat().st_size for path in folder.rglob("*") if path.is_file())
+             for name, folder in available.items()}
     total = sum(sizes[name] for name in selected)
     if total > MAX_SNAPSHOT_BYTES:
         raise ValueError("Current and previous snapshots exceed the 3 GiB publication budget")

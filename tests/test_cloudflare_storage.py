@@ -384,7 +384,7 @@ def test_fast_restore_accepts_older_compact_archives(tmp_path, monkeypatch, omit
     memory.download_catalog(document, refresh_inputs=True)
     for name in omitted:
         payload = (fresh / prefix / name).read_bytes()
-        assert hashlib.sha256(payload).hexdigest() == document["files"][name]
+        assert hashlib.sha256(payload).hexdigest() == cloud.document_files(document)[name]
     assert memory.transfers().metrics["object_downloads"] == 2 + len(omitted)
 
 

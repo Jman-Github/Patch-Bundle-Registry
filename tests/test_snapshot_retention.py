@@ -38,6 +38,17 @@ def test_retention_enforces_byte_budget_and_protects_previous(tmp_path, monkeypa
     assert all((tmp_path / name).exists() for name in names)
 
 
+def test_d1_retention_keeps_current_and_previous_beyond_the_pages_budget(tmp_path, monkeypatch):
+    names = [make_snapshot(tmp_path, i, 10) for i in range(1, 5)]
+    monkeypatch.setattr(retention, "MAX_SNAPSHOT_BYTES", 1)
+    retained, expired = retention.retention_plan(tmp_path, names[3], names[1], published=False)
+    assert retained == [names[1], names[3]]
+    assert set(expired) == {names[0], names[2]}
+    # The legacy Pages backend still refuses oversized publications.
+    with pytest.raises(ValueError, match="publication budget"):
+        retention.retention_plan(tmp_path, names[3], names[1])
+
+
 @pytest.mark.parametrize(
     "name", ["../outside", "snapshots/../../outside", "snapshots/not-a-generation"]
 )

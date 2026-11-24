@@ -125,6 +125,8 @@ class BlobCache:
         self.locks = [Lock() for _ in range(64)]
         self.guard = Lock()
         self.metrics = Counter()
+        # Digests whose remote bytes this run proved by upload ETag or comparison.
+        self.confirmed = set()
 
     def add(self, name, value=1):
         with self.guard:
@@ -191,14 +193,17 @@ class BlobCache:
                     else:
                         self.add("object_downloads")
                         self.add("download_bytes", len(remote))
-                if remote == body:
+                confirmed = remote == body
+                if confirmed:
                     self.add("uploads_avoided")
                 else:
-                    self.put(key, body)
+                    confirmed = self.put(key, body) is True
                     self.add("object_uploads")
                     self.add("upload_bytes", len(body))
                 with self.guard:
                     known.add(digest)
+                    if confirmed:
+                        self.confirmed.add(digest)
             else:
                 self.add("uploads_avoided")
             self.remember(digest, body)

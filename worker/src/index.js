@@ -673,6 +673,23 @@ export default {
       const manifest = catalogData && url.pathname === "/catalog/data/manifest.json";
       const snapshot = catalogData && !manifest;
       const snapshotMatch = snapshot && url.pathname.match(/^\/catalog\/data\/snapshots\/([a-f0-9]{24})\/(.+)$/);
+      // Generation-addressed files never change. Serve repeats from the edge
+      // before touching D1, the generation index, or R2.
+      const snapshotCache = snapshotMatch && request.method === "GET" && context?.waitUntil ?
+        globalThis.caches?.default : null;
+      let snapshotKey;
+      if (snapshotCache) {
+        const cacheUrl = new URL(url);
+        cacheUrl.search = "";
+        cacheUrl.searchParams.set("__catalog_origin",allowedCorsOrigin(request,env) ?? "");
+        snapshotKey = new Request(cacheUrl);
+        const cached = await snapshotCache.match(snapshotKey).catch(() => undefined);
+        if (cached) {
+          if (matchesEtag(request, cached.headers.get("ETag")))
+            return new Response(null, {status:304,headers:cached.headers});
+          return cached;
+        }
+      }
       const active = d1 && await d1.activeGeneration(snapshotMatch?.[1]);
       const fallback = d1 ? null : await createCatalog(env,context);
       generation = active?.generation ?? fallback.manifest.generation;
@@ -736,7 +753,10 @@ export default {
         const object = await env.ARCHIVE.get(objectKey);
         if (!object) throw new CatalogError("Catalog object unavailable",503);
         if (conditional) return new Response(null,{status:304,headers});
-        return new Response(object.body ?? JSON.stringify(await object.json()),{headers});
+        const response = new Response(object.body ?? JSON.stringify(await object.json()),{headers});
+        if (snapshotCache)
+          context.waitUntil(snapshotCache.put(snapshotKey,response.clone()).catch(() => undefined));
+        return response;
       }
 
       const catalog = d1 ? await d1.initialize(active) : fallback;
