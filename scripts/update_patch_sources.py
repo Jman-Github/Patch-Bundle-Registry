@@ -11,7 +11,7 @@ import httpx
 from scripts.git_hosts import ROOT, endpoint, normalize_source
 from scripts.source_policy import source_channels
 
-FEED = "https://morphe-patches.software/data/bundles.json"
+FEED = "https://morphe-patches.software/json/bundles.json"
 FEED_HOSTS = {"github": "github.com", "gitlab": "gitlab.com"}
 MAX_FEED_BYTES = 64 * 1024 * 1024
 

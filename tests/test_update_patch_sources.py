@@ -12,7 +12,9 @@ def test_updates_sources_and_prunes_only_confirmed_404(tmp_path):
     source_file.parent.mkdir()
     inventory = {
         name: {"patches": f"https://github.com/owner/{name}", "disabled": name == "403"}
-        for name in ("404", "403", "429", "500", "timeout", "moved", "api-only-404", "existing")
+        for name in (
+            "404", "403", "429", "500", "timeout", "moved", "api-only-404", "renamed", "existing"
+        )
     }
     inventory["existing"]["integrations"] = True
     inventory["existing"]["integration"] = "https://github.com/owner/integrations"
@@ -20,7 +22,7 @@ def test_updates_sources_and_prunes_only_confirmed_404(tmp_path):
     retained = {name: value for name, value in inventory.items() if name != "404"}
 
     def respond(request):
-        if str(request.url) == FEED:
+        if str(request.url) == "https://morphe-patches.software/json/bundles.json":
             return httpx.Response(
                 200,
                 json={
@@ -45,9 +47,12 @@ def test_updates_sources_and_prunes_only_confirmed_404(tmp_path):
                 "500": 500,
                 "moved": 301,
                 "api-only-404": 404,
+                "renamed": 404,
             }
             return httpx.Response(codes.get(repo, 200))
         assert "authorization" not in request.headers
+        if request.url.path == "/owner/renamed":
+            return httpx.Response(301, headers={"Location": "/owner/new-name"})
         return httpx.Response(404 if request.url.path == "/owner/404" else 200)
 
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
