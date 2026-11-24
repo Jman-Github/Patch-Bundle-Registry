@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { matchingSources } from "../../shared/source-picker.js";
+import { matchingOptions } from "../../shared/source-picker.js";
 import { bindActions, iconAction, importFormatAction } from "../../shared/actions.js";
 import { createBrowsePreferences } from "../../shared/preferences.js";
 
@@ -8,10 +8,10 @@ test("Source search matches multiple terms across repository labels and hosts", 
     const options = [{label:"All sources", value:""},
         {label:"Team / Video",value:"https://github.com/team/video"},
         {label:"Team / Music",value:"https://git.example/team/music"}];
-    assert.equal(matchingSources(options, "").length, 3);
-    assert.deepEqual(matchingSources(options, " TEAM github "), options.slice(0,2));
-    assert.deepEqual(matchingSources(options, "music git.example"), [options[0],options[2]]);
-    assert.deepEqual(matchingSources(options, "missing"), [options[0]]);
+    assert.equal(matchingOptions(options, "").length, 3);
+    assert.deepEqual(matchingOptions(options, " TEAM github "), [options[1]]);
+    assert.deepEqual(matchingOptions(options, "music git.example"), [options[2]]);
+    assert.deepEqual(matchingOptions(options, "missing"), []);
 });
 
 test("New tabs default to Latest while explicit selections and legacy types survive", () => {
@@ -102,59 +102,119 @@ test("Reseam import choices close on Escape while an option has keyboard focus",
 });
 
 
-// Exercise popup selection and refresh while keeping search outside the scroll list.
-test("Source popup searches, updates its live list, selects a source and restores focus", async t => {
-    const {createSourcePicker} = await import("../../shared/source-picker.js");
-    function node() {
-        return {handlers:{},attrs:{},value:"",isConnected:true,dataset:{},
-            addEventListener(name,fn){this.handlers[name]=fn;},
-            setAttribute(name,value){this.attrs[name]=value;},
-            focus(){this.focused=true;}, classList:{add(){},remove(){}}};
-    }
-    const button = node(), label = node(), search = node(), body = node(), count = node(), close = node();
-    button.querySelector=()=>label;
-    const dialog = node();
-    dialog.querySelector = selector=>({".details-search":search,".source-options":body,
-        ".details-count":count,".dialog-close":close})[selector];
-    dialog.showModal=()=>{dialog.open=true;};
-    dialog.close=()=>{dialog.open=false;dialog.handlers.close();};
-    let choices;
-    body.querySelectorAll=()=> {
-        choices=[...body.innerHTML.matchAll(/data-source="([^"]*)"/g)].map(match=>{
-            const choice=node();choice.dataset.source=match[1];return choice;
-        });
-        return choices;
-    };
-    const prior = globalThis.document;
-    globalThis.document={activeElement:button,createElement:()=>dialog,
-        body:{appendChild(){}},documentElement:node()};
-    t.after(()=>{globalThis.document=prior;});
-    const select={value:"",options:[{label:"All sources",value:""},
-        {label:"Video patches",value:"https://github.com/o/video"},
-        {label:"Music patches",value:"https://git.example/o/music"}]};
-    const selected=[];
-    const picker=createSourcePicker({button,select,onSelect:value=>selected.push(value),
-        escapeHtml:value=>String(value)});
-    button.handlers.click();
-    assert(dialog.open);
-    assert(search.focused);
-    assert.equal(button.attrs["aria-expanded"],"true");
-    search.value="music";search.handlers.input();
-    assert.equal(count.textContent,"1 source");
-    assert.doesNotMatch(body.innerHTML,/Video patches/);
-    select.options.push({label:"Music extras",value:"https://github.com/o/music-extra"});
-    picker.sync();
-    assert.equal(count.textContent,"2 sources");
-    assert.equal(search.value,"music");
-    choices.find(choice=>choice.dataset.source==="https://git.example/o/music").handlers.click();
-    assert.deepEqual(selected,["https://git.example/o/music"]);
-    assert.equal(label.textContent,"Music patches");
-    assert(!dialog.open);
-    assert(button.focused);
-    assert.equal(button.attrs["aria-expanded"],"false");
+test("Release search combines version and channel without always showing the reset option", () => {
+    const options = [{label:"All versions", value:""},
+        {label:"v2.0.0 - Release", value:"v2.0.0"},
+        {label:"v2.0.0-dev.3 - Prerelease", value:"v2.0.0-dev.3"}];
+    assert.deepEqual(matchingOptions(options, "v2.0.0 dev.3"), [options[2]]);
+    assert.deepEqual(matchingOptions(options, "all versions"), [options[0]]);
 });
 
+// A small element double covering the DOM surface createFilterPicker uses.
+class FakeElement {
+    constructor(tag = "div") {
+        Object.assign(this, {tagName: tag.toUpperCase(), children: [], parent: null, handlers: {}, attrs: {},
+            dataset: {}, style: {}, hidden: false, disabled: false, value: "", textContent: "", id: "",
+            tabIndex: 0, scrollTop: 0, scrollHeight: 120, offsetHeight: 30, open: false});
+    }
+    get isConnected() { return Boolean(this.parent?.isConnected ?? this.connected); }
+    append(...nodes) { nodes.forEach(node => { node.parent = this; this.children.push(node); }); }
+    replaceChildren(...nodes) { this.children.forEach(node => { node.parent = null; }); this.children = []; this.append(...nodes); }
+    after(node) { node.parent = this.parent; this.parent?.children.push(node); }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter(node => node !== this); this.parent = null; }
+    contains(node) { for (; node; node = node.parent) if (node === this) return true; return false; }
+    closest(selector) { return selector === "button" && this.tagName === "BUTTON" ? this : this.parent?.closest?.(selector) ?? null; }
+    querySelector() { return this.children.find(child => "pickerValue" in child.dataset) ?? null; }
+    setAttribute(name, value) { this.attrs[name] = String(value); }
+    getAttribute(name) { return this.attrs[name] ?? null; }
+    addEventListener(name, fn) { (this.handlers[name] ??= []).push(fn); }
+    removeEventListener(name, fn) { this.handlers[name] = (this.handlers[name] || []).filter(item => item !== fn); }
+    dispatchEvent(event) {
+        if (event instanceof Event) event = {type: event.type, bubbles: event.bubbles};
+        event.target ??= this;
+        event.preventDefault ??= () => {}; event.stopPropagation ??= () => {};
+        for (let node = this; node; node = event.bubbles ? node.parent : null)
+            (node.handlers[event.type] || []).forEach(fn => fn(event));
+    }
+    focus() { globalThis.document.activeElement = this; }
+    getBoundingClientRect() { return {top: 100, bottom: 140, left: 10, width: 300}; }
+    matches(selector) { return selector === ":popover-open" && this.open; }
+    showPopover() { this.toggle(true); }
+    hidePopover() { this.toggle(false); }
+    toggle(open) {
+        if (this.open === open) return;
+        this.dispatchEvent({type: "beforetoggle", newState: open ? "open" : "closed"});
+        this.open = open;
+        this.dispatchEvent({type: "toggle", newState: open ? "open" : "closed"});
+    }
+}
 
+test("Filter picker opens, searches, selects with a change event, and returns focus", async t => {
+    const {createFilterPicker} = await import("../../shared/source-picker.js");
+    const prior = {document: globalThis.document, window: globalThis.window, matchMedia: globalThis.matchMedia};
+    const root = new FakeElement("body");
+    root.connected = true;
+    globalThis.document = Object.assign(new FakeElement("document"), {
+        activeElement: null, documentElement: {clientWidth: 1024, clientHeight: 768},
+        createElement: tag => new FakeElement(tag)
+    });
+    globalThis.window = new FakeElement("window");
+    globalThis.matchMedia = () => ({matches: false});
+    t.after(() => Object.assign(globalThis, prior));
+
+    const field = new FakeElement("div");
+    root.append(field);
+    const button = new FakeElement("button");
+    button.id = "source-picker";
+    const value = new FakeElement("span");
+    value.dataset.pickerValue = "";
+    button.append(value);
+    const label = new FakeElement("label");
+    const options = [{label: "All sources", value: ""}, {label: "Video", value: "https://github.com/o/video"},
+        {label: "Music", value: "https://git.example/o/music"}];
+    const select = Object.assign(new FakeElement("select"), {labels: [label], options});
+    Object.defineProperty(select, "selectedOptions", {get: () => options.filter(option => option.value === select.value)});
+    field.append(label, select, button);
+    const changes = [];
+    select.addEventListener("change", () => changes.push(select.value));
+
+    createFilterPicker({button, select, label: "Choose a source", searchLabel: "Search sources", showValue: true});
+    const panel = field.children.find(child => child.id === "source-picker-options");
+    const [search, list] = panel.children;
+    assert.equal(select.hidden, true);
+    assert.equal(button.hidden, false);
+    assert.equal(label.htmlFor, "source-picker");
+    assert.equal(value.textContent, "All sources");
+
+    button.dispatchEvent({type: "click", detail: 0});
+    assert(panel.open);
+    assert.equal(button.attrs["aria-expanded"], "true");
+    assert.equal(document.activeElement, search);
+    assert.equal(document.handlers.scroll?.length, 1);
+
+    search.value = "music";
+    search.dispatchEvent({type: "input"});
+    assert.deepEqual(list.children.map(choice => choice.dataset.value), ["https://git.example/o/music"]);
+
+    list.dispatchEvent({type: "click", target: list.children[0]});
+    assert.deepEqual(changes, ["https://git.example/o/music"]);
+    assert.equal(value.textContent, "Music");
+    assert(!panel.open);
+    assert.equal(button.attrs["aria-expanded"], "false");
+    assert.equal(document.activeElement, button);
+    assert.equal(document.handlers.scroll.length, 0);
+
+    // Escape closes without changing the value, and detaching an open panel drops its listeners.
+    button.dispatchEvent({type: "click", detail: 0});
+    panel.dispatchEvent({type: "keydown", key: "Escape"});
+    assert(!panel.open);
+    assert.deepEqual(changes, ["https://git.example/o/music"]);
+    button.dispatchEvent({type: "click", detail: 0});
+    field.remove();
+    document.handlers.scroll[0]({target: document});
+    assert.equal(document.handlers.scroll.length, 0);
+    assert.equal(window.handlers.resize.length, 0);
+});
 
 test("Copying an import choice returns keyboard focus to the menu trigger",async t=>{
     t.mock.timers.enable({apis:["setTimeout"]});

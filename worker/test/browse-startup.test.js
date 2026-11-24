@@ -21,7 +21,7 @@ function startup(saved, { blocked = false, mobile = false, readyState = "loading
     };
     const filters = ["all", "latest", "release", "prerelease"].map(filter =>
         Object.assign(node(filter), { dataset: {filter} }));
-    const tabs = ["bundles", "apps"].map(tab => node(tab + "-tab"));
+    const tabs = ["bundles", "apps", "changelogs"].map(tab => node(tab + "-tab"));
     const root = node("root");
     const document = Object.assign(new EventTarget(), { readyState, documentElement: root,
         getElementById: get, querySelector: get,
@@ -91,6 +91,37 @@ test("Early restored grid settings do not become defaults for the other tab", ()
         assert.equal(runInNewContext('browsePreferences.read("apps").grid', context), mobile);
         assert.equal(runInNewContext('browsePreferences.read("bundles").grid', context), !mobile);
     }
+});
+
+test("Changelog links restore their filters and hide irrelevant controls during startup", () => {
+    const view = startup(null, {search:"?tab=changelogs&source=https%3A%2F%2Fgithub.com%2Fa%2Fb&version=v2"});
+    view.parsed();
+    assert.equal(view.tabs.find(button => button.classes.has("active")).id, "changelogs-tab");
+    assert.equal(view.get("bundle-version-filter").value, "v2");
+    assert.equal(view.get("package-filter").hidden, true);
+    assert.equal(view.get("view-toggle").hidden, true);
+    assert.equal(view.get("calendar-toggle").hidden, false);
+    assert.equal(view.get("calendar-toggle").attrs.get("aria-pressed"), "false");
+    assert.equal(view.get("release-feed").hidden, false);
+    assert.equal(view.filters.find(button => button.classes.has("active")).id, "all");
+    assert.equal(startup(null, {search:"?tab=changelogs&release=latest",readyState:"interactive"})
+        .filters.find(button => button.classes.has("active")).id, "latest");
+});
+
+test("Legacy changelog preferences open all history while new explicit Latest selections persist", () => {
+    const saved = {activeTab:"changelogs",tabs:{changelogs:{release:"latest"}}};
+    const selection = value => startup(JSON.stringify(value), {readyState:"interactive"})
+        .filters.find(button => button.classes.has("active")).id;
+    assert.equal(selection(saved), "all");
+    assert.equal(selection({...saved, changelogHistory:true}), "latest");
+
+    const storage = {getItem: () => JSON.stringify(saved), setItem: (key, value) => {
+        storage.getItem = () => value;
+    }};
+    const preferences = createBrowsePreferences(() => storage);
+    assert.equal(preferences.read("changelogs").release, "all");
+    preferences.save("changelogs", {release:"latest"});
+    assert.equal(createBrowsePreferences(() => storage).read("changelogs").release, "latest");
 });
 
 test("Shared links restore their tab and filters before saved preferences", () => {

@@ -1,4 +1,4 @@
-"""Cache repository JSON indexes and bounded regional Google Play metadata."""
+"""Cache repository indexes, regional Google Play metadata, and APKMirror fallbacks."""
 
 import argparse
 import json
@@ -14,11 +14,15 @@ from urllib.parse import quote
 import httpx
 
 try:
+    from scripts.apkmirror_metadata import UnrecognizedSearchPage
+    from scripts.apkmirror_metadata import lookup as lookup_apkmirror
     from scripts.app_catalog import safe_icon
     from scripts.generate_database import ROOT, encoded, packages_for, read_json
     from scripts.git_hosts import normalize_source
     from scripts.source_policy import disabled_sources, source_channels
 except ModuleNotFoundError:
+    from apkmirror_metadata import UnrecognizedSearchPage
+    from apkmirror_metadata import lookup as lookup_apkmirror
     from app_catalog import safe_icon
     from generate_database import ROOT, encoded, packages_for, read_json
     from git_hosts import normalize_source
@@ -42,6 +46,7 @@ REPOSITORIES = (
 PLAY_COUNTRIES = ("US", "GB", "IN")
 PLAY_EXTRA_COUNTRIES = ("DE", "BR", "JP", "KR", "ID")
 MAX_INDEX_BYTES = 256 * 1024 * 1024
+APKMIRROR_LIMIT = 30
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
 
 
@@ -284,7 +289,108 @@ def fetch_index(client, url, headers, deadline, base_url, source):
         return fdroid_apps(json.loads(b"".join(chunks)), base_url, source), dict(response.headers)
 
 
-def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep, budget=None):
+def enrich_apkmirror(
+    state, apps, candidates, client, *, now, current_time, deadline, limit, delay, sleep
+):
+    """Spend a bounded lookup budget on packages with confirmed Play misses."""
+    deadline = min(deadline, time.monotonic() + 30)
+    if (
+        not limit
+        or time.monotonic() >= deadline
+        or not expired(state.get("apkmirror_retry_after"), current_time(), timedelta(0))
+    ):
+        return 0
+    requests = 0
+
+    def fetch_page(url):
+        nonlocal requests
+        remaining = deadline - time.monotonic()
+        wait = delay if requests else 0
+        if requests >= limit or remaining <= wait:
+            raise LookupBudget
+        if wait:
+            sleep(wait)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise LookupBudget
+        requests += 1
+        with client.stream(
+            "GET", url, follow_redirects=False, timeout=min(10, remaining)
+        ) as response:
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                if time.monotonic() >= deadline:
+                    raise LookupBudget
+                if len(content) + len(chunk) > 2 * 1024 * 1024:
+                    raise ValueError("APKMirror response exceeds metadata budget")
+                content.extend(chunk)
+            return content.decode("utf-8", errors="replace")
+
+    queued = sorted(
+        (
+            package
+            for package in candidates
+            if apps.get(package, {}).get("play_status") == "not_found"
+            and (
+                not apps[package].get("app_name")
+                or apps[package].get("metadata_source") == "apkmirror"
+            )
+            and expired(apps[package].get("apkmirror_retry_after"), now, timedelta(0))
+            and expired(
+                apps[package].get("apkmirror_checked_at"),
+                now,
+                timedelta(days=30 if apps[package].get("app_name") else 7),
+            )
+        ),
+        key=lambda package: apps[package].get("apkmirror_checked_at") or "",
+    )
+    consecutive_failures = 0
+    for package in queued:
+        cached = apps[package]
+        try:
+            found = lookup_apkmirror(package, fetch_page)
+        except LookupBudget:
+            break
+        except (httpx.HTTPError, ValueError) as error:
+            consecutive_failures += 1
+            received_at = current_time()
+            blocked = isinstance(error, httpx.HTTPStatusError) and (
+                error.response.status_code in {401, 403, 429, 503}
+                or "retry-after" in error.response.headers
+            )
+            retry = (
+                provider_retry_after(error.response, received_at)
+                if blocked
+                else (received_at + timedelta(minutes=10)).isoformat()
+            )
+            cached["apkmirror_retry_after"] = retry
+            if blocked or isinstance(error, UnrecognizedSearchPage) or consecutive_failures >= 3:
+                state["apkmirror_retry_after"] = retry
+                print("Application metadata: APKMirror unavailable; retaining cached names.")
+                break
+            continue
+        consecutive_failures = 0
+        cached.pop("apkmirror_retry_after", None)
+        if found:
+            cached.update({**found, "icon_url": found["icon_url"] or cached.get("icon_url")})
+        cached["apkmirror_checked_at"] = current_time().isoformat()
+    return requests
+
+
+def refresh(
+    root,
+    client,
+    *,
+    now=None,
+    max_play=None,
+    max_apkmirror=None,
+    delay=1,
+    sleep=time.sleep,
+    budget=None,
+):
     now = now or datetime.now(UTC)
     stamp = now.isoformat()
     started = time.monotonic()
@@ -328,7 +434,8 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
     backfill = pending > 50 and (max_play is None or max_play > 50)
     max_play = (1500 if backfill else 50) if max_play is None else max_play
     budget = (1800 if backfill else 180) if budget is None else budget
-    if max_play < 0 or budget < 0 or delay < 0:
+    max_apkmirror = APKMIRROR_LIMIT if max_apkmirror is None else max_apkmirror
+    if max_play < 0 or max_apkmirror < 0 or budget < 0 or delay < 0:
         raise ValueError("Application metadata budgets must be nonnegative")
     deadline = started + budget
 
@@ -460,7 +567,8 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
         if package in indexed or package in overrides or not PACKAGE.fullmatch(package):
             continue
         cached = apps.get(package, {})
-        ttl = timedelta(days=30 if cached.get("app_name") else 7)
+        primary_name = cached.get("app_name") and cached.get("metadata_source") != "apkmirror"
+        ttl = timedelta(days=30 if primary_name else 7)
         countries = list(PLAY_COUNTRIES)
         # Extra markets are an opt-in second pass for packages absent in all base markets.
         if (
@@ -485,7 +593,7 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
         if not expired(cached.get("play_retry_after"), now, timedelta(0)):
             continue
         if not expired(cached.get("checked_at"), now, ttl):
-            if cached.get("app_name") or set(countries).issubset(attempted):
+            if primary_name or set(countries).issubset(attempted):
                 continue
         if expired(cached.get("play_attempted_at", cached.get("checked_at")), now, ttl):
             attempted = []
@@ -515,6 +623,12 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
                     if time.monotonic() >= deadline:
                         halted = True
                         break
+                    if response.url.host != "play.google.com":
+                        state["play_retry_after"] = (
+                            current_time() + timedelta(hours=1)
+                        ).isoformat()
+                        halted = True
+                        break
                     if response.status_code != 404:
                         response.raise_for_status()
                         chunks, size = [], 0
@@ -524,9 +638,7 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
                                 raise ValueError("Google Play response exceeds metadata budget")
                             chunks.append(chunk)
                         content = b"".join(chunks).decode("utf-8", errors="replace")
-                        if response.url.host != "play.google.com" or re.search(
-                            r"<title[^>]*>\s*Before you continue", content, re.IGNORECASE
-                        ):
+                        if re.search(r"<title[^>]*>\s*Before you continue", content, re.IGNORECASE):
                             state["play_retry_after"] = (
                                 current_time() + timedelta(hours=1)
                             ).isoformat()
@@ -602,6 +714,23 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
                 break
         if halted:
             break
+    mirror_candidates = (
+        package
+        for package in candidates
+        if package not in indexed and package not in overrides and PACKAGE.fullmatch(package)
+    )
+    mirror_requests = enrich_apkmirror(
+        state,
+        apps,
+        mirror_candidates,
+        client,
+        now=now,
+        current_time=current_time,
+        deadline=deadline,
+        limit=max_apkmirror,
+        delay=delay,
+        sleep=sleep,
+    )
     save_state()
     named = sum(
         bool(apps.get(package, {}).get("app_name"))
@@ -611,7 +740,8 @@ def refresh(root, client, *, now=None, max_play=None, delay=1, sleep=time.sleep,
     remaining = sum(unchecked(package) and package not in overrides for package in wanted)
     print(
         f"Application metadata: {named}/{len(wanted)} apps named; "
-        f"{lookups} Google Play lookups; {remaining} packages awaiting a completed lookup.",
+        f"{lookups} Google Play lookups; {mirror_requests} APKMirror requests; "
+        f"{remaining} packages awaiting a completed lookup.",
         flush=True,
     )
     return state
@@ -622,6 +752,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--play-limit", type=int, help="Override the adaptive Google Play lookup cap"
     )
+    parser.add_argument("--apkmirror-limit", type=int, help="Override the APKMirror request cap")
     parser.add_argument("--budget", type=float, help="Override the metadata time budget in seconds")
     args = parser.parse_args()
     with httpx.Client(
@@ -629,4 +760,10 @@ if __name__ == "__main__":
         follow_redirects=True,
         headers={"User-Agent": "Patch-Bundle-Registry/1.0"},
     ) as client:
-        refresh(ROOT, client, max_play=args.play_limit, budget=args.budget)
+        refresh(
+            ROOT,
+            client,
+            max_play=args.play_limit,
+            max_apkmirror=args.apkmirror_limit,
+            budget=args.budget,
+        )

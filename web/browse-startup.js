@@ -8,10 +8,11 @@
     catch { /* Storage is optional. */ }
     const params = new URLSearchParams(location.search);
     const shared = ["tab", "q", "package", "source", "version", "type", "release", "view",
-        "app", "bundle", "bundle_source", "bundle_version", "section"].some(key => params.has(key));
-    const tab = shared ? params.get("tab") === "apps" ||
-        (!params.has("tab") && params.has("app")) ? "apps" : "bundles" :
-        saved?.activeTab === "apps" ? "apps" : "bundles";
+        "app", "bundle", "bundle_source", "bundle_version", "section", "baseline"].some(key => params.has(key));
+    const requestedTab = shared
+        ? (params.has("tab") ? params.get("tab") : params.has("app") ? "apps" : "bundles")
+        : saved?.activeTab;
+    const tab = ["apps", "changelogs"].includes(requestedTab) ? requestedTab : "bundles";
     const state = shared ? {
         search: params.get("q"), package: params.get("package"), source: params.get("source"),
         version: params.get("version"), type: params.get("type"), release: params.get("release"),
@@ -19,16 +20,20 @@
     } : saved?.tabs?.[tab] || {};
     const text = key => typeof state[key] === "string"
         ? (key === "type" ? state[key].replace(/^ReSeam/, "Reseam") : state[key]).slice(0, 512) : "";
-    const release = ["all", "latest", "release", "prerelease"].includes(state.release) ? state.release : "latest";
+    const legacyLatest = !shared && tab === "changelogs" && !saved?.changelogHistory && state.release === "latest";
+    const release = !legacyLatest && ["all", "latest", "release", "prerelease"].includes(state.release)
+        ? state.release : tab === "changelogs" ? "all" : "latest";
     const grid = typeof state.grid === "boolean" ? state.grid : !matchMedia("(max-width: 700px)").matches;
     function restore() {
         const byId = id => document.getElementById(id);
         byId("search").value = text("search");
-        byId("search").placeholder = tab === "apps" ? "Search by app or package" : "Search bundles or patches";
-        byId("search").setAttribute("aria-label", tab === "apps" ? "Search apps" : "Search bundles");
+        const changelogs = tab === "changelogs";
+        byId("search").placeholder = changelogs ? "Search changelogs by source or version" :
+            tab === "apps" ? "Search by app or package" : "Search bundles or patches";
+        byId("search").setAttribute("aria-label", changelogs ? "Search changelogs" : tab === "apps" ? "Search apps" : "Search bundles");
         byId("package-filter").value = text("package");
         for (const [id, value] of [["source-filter", text("source")], ["bundle-type-filter", text("type")],
-            ["bundle-version-filter", tab === "bundles" ? text("version") : ""]]) {
+            ["bundle-version-filter", tab === "apps" ? "" : text("version")]]) {
             const control = byId(id);
             const label = id === "bundle-type-filter"
                 ? value.startsWith("Morphe:") ? "Morphe" : value.startsWith("Reseam") ? "Reseam"
@@ -37,7 +42,12 @@
             if (value) control.appendChild(new Option(label, value));
             control.value = value;
         }
-        byId("source-picker-value").textContent = text("source") || "All sources";
+        byId("view-toggle").hidden = changelogs;
+        byId("calendar-toggle").hidden = !changelogs;
+        byId("calendar-toggle").setAttribute("aria-pressed", String(saved?.changelogCalendar === true));
+        byId("package-filter").hidden = changelogs;
+        byId("v-track").hidden = changelogs;
+        byId("release-feed").hidden = !changelogs;
         byId("bundle-version-filter").disabled = !text("source");
         document.querySelectorAll(".filter-btn").forEach(button => {
             const selected = button.dataset.filter === release;
@@ -57,7 +67,8 @@
         byId("bundle-version-field").hidden = tab === "apps";
         document.querySelector(".filter-row").classList.toggle("apps-filters", tab === "apps");
         byId("apps-note").hidden = tab !== "apps";
-        byId("status").textContent = tab === "apps" ? "Loading apps..." : "Loading bundles...";
+        byId("status").textContent = changelogs ? "Loading changelogs..." :
+            tab === "apps" ? "Loading apps..." : "Loading bundles...";
         byId("catalog-app").addEventListener?.("error", () => {
             byId("status").textContent = "The catalog interface could not start.";
             byId("catalog-stats").textContent = "Catalog statistics unavailable";

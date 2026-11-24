@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupBundlePatches, filterPatchGroups } from "../../shared/details.js";
+import { groupBundlePatches, filterPatchGroups, formatPatchDescription } from "../../shared/details.js";
 import { patchMatchesSearch } from "../../shared/site.js";
 import { createDetailsBrowser, renderPatchOptions, readableOptionType, readableOptionValue } from "../../shared/detail-browser.js";
 import worker from "../src/index.js";
@@ -39,6 +39,24 @@ test("Options display false, zero, null, required status and escaped choices", (
     assert.equal(renderPatchOptions([],escape),"");
 });
 
+test("Description formatting preserves long internal spacing and trims blank edges", () => {
+    const blankLines = "\n".repeat(32768);
+    assert.equal(formatPatchDescription("\t\r\n  First" + blankLines + "  Last\r\n "), "First" + blankLines + "Last");
+    assert.equal(formatPatchDescription(" \t\r\n \n  "), "");
+});
+
+test("Option descriptions retain paragraphs and align interpolated bullets", () => {
+    const value = "\r\n    Choose a file.\r\n\r\n    Supported names:\r\n    - logo.png\r\n- mask.png\r\n      with transparency\r\n    ";
+    const html = renderPatchOptions([{title:"Logo",description:value}],escape);
+    assert.match(html,/<p class="patch-option-description">Choose a file\.\n\nSupported names:\n- logo\.png\n- mask\.png\n  with transparency<\/p>/);
+});
+
+test("Blank option descriptions do not render an empty paragraph", () => {
+    const html = renderPatchOptions([{title:"Logo",description:" \r\n "}],escape);
+    assert.match(html,/Logo/);
+    assert.doesNotMatch(html,/patch-option-description/);
+});
+
 test("REST and GraphQL preserve extracted option metadata", async () => {
     const base = fixture();
     const rows = JSON.parse(base.bodies["patches/00000.json"]);
@@ -63,9 +81,11 @@ function element() {
     return {handlers,classes,selectors,open:false,isConnected:true,value:"",dataset:{},attrs:{},
         classList:{add:key=>classes.add(key),remove:key=>classes.delete(key)},
         setAttribute(key,value){this.attrs[key]=value;},
+        getAttribute(key){return this.attrs[key];},
         addEventListener(event,fn){handlers[event]=fn;},
         focus(){this.focused=true;},insertAdjacentHTML(position,html){this.innerHTML=html+this.innerHTML;},showModal(){this.open=true;},
         close(){this.open=false;handlers.close?.();},
+        closest(){return null;},
         querySelector(selector){
             if (!selectors.has(selector)) selectors.set(selector,element());
             return selectors.get(selector);
@@ -88,6 +108,13 @@ function browser(t, patches, extra = {}) {
         escapeHtml:escape, installAvatarFallback(){},formatDate:()=>"",getApi:()=>"https://api.test",
         bundleChangelog:async bundle=>bundle.description, renderMarkdown:escape, ...extra
     });
+    const sections = dialog.querySelector(".details-sections");
+    const buttons = ["patches", "changelog", "compare"].map(section => {
+        const button = sections.querySelector(`[data-details-section="${section}"]`);
+        button.dataset.detailsSection = section;
+        return button;
+    });
+    sections.querySelectorAll = selector => selector === "[data-details-section]" ? buttons : [];
     const body = dialog.querySelector(".details-body"), nodes = new Map();
     let rendered;
     function bodyGroups() {
@@ -330,6 +357,42 @@ test("Changelog shortcuts load full notes lazily and preserve patch searches bet
     assert.equal(patchesButton.attrs["aria-pressed"], "true");
 });
 
+test("Comparison loads history only when opened and explains when no verified baseline exists", async t => {
+    let comparisons = 0;
+    const {api,dialog} = browser(t, async () => [video], {
+        comparisonReleases: async () => { comparisons++; return { candidates: [] }; }
+    });
+    const bundle = {version:"v1",sourceUrl:"https://github.com/o/a",hasPatches:true,metadataStatus:"verified"};
+    await api.openBundle(bundle, {section:"changelog"});
+    assert.equal(comparisons, 0);
+    const sections = dialog.querySelector(".details-sections");
+    sections.querySelector('[data-details-section="compare"]').handlers.click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(comparisons, 1);
+    assert.equal(dialog.querySelector(".details-changelog").hidden, true);
+    assert.match(dialog.querySelector(".release-comparison").innerHTML, /No other releases with verified patch metadata/);
+});
+
+test("Closing a comparison during its history request prevents follow-up work", async t => {
+    let resolveHistory;
+    const history = new Promise(resolve => { resolveHistory = resolve; });
+    let patchReads = 0;
+    const {api,dialog} = browser(t, async () => [video], {
+        comparisonReleases: () => history,
+        comparisonPatches: async () => { patchReads++; return [[video], [video]]; }
+    });
+    const bundle = {version:"v2",sourceUrl:"https://github.com/o/a",hasPatches:true,metadataStatus:"verified"};
+    const loading = api.openBundle(bundle, {section:"compare"});
+    const panel = dialog.querySelector(".release-comparison");
+    const before = panel.innerHTML;
+    assert.match(before, /Loading release history/);
+    api.close();
+    resolveHistory({candidates:[{id:"a",version:"v1"}], defaultId:"a"});
+    await loading;
+    assert.equal(patchReads, 0);
+    assert.equal(panel.innerHTML, before);
+});
+
 test("Loading patches in the background cannot replace the visible changelog", async t => {
     let resolve, noteReads = 0;
     const waiting = new Promise(done => { resolve = done; });
@@ -409,6 +472,17 @@ test("App windows provide copy controls and bundle actions outside the disclosur
     assert.match(body, /<div class="details-group-actions"[^]*?aria-label="Download bundle"/);
     assert.match(body, /aria-label="Open repository"/);
     assert.match(body, /data-copy-text="https:\/\/api.test\//);
+});
+
+test("Closing release notes focuses the replacement button after the feed is rebuilt", async t => {
+    const {api,focus} = browser(t, async () => []);
+    const replacement = element();
+    focus.id = replacement.id = "read-changelog-a";
+    document.getElementById = id => id === replacement.id ? replacement : null;
+    await api.openBundle({id:"a",version:"v1",sourceUrl:"https://github.com/o/a"}, {section:"changelog"});
+    focus.isConnected = false;
+    api.close();
+    assert.equal(replacement.focused, true);
 });
 
 test("Detail navigation records bundle sections and apps, with silent history restoration", async t => {

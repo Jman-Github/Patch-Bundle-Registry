@@ -1,3 +1,22 @@
+export function formatPatchDescription(value) {
+    const lines = String(value ?? "").split(/\r\n?|\n/).map(line => line.trimEnd());
+    let start = 0, end = lines.length;
+    while (start < end && !lines[start]) start++;
+    while (end > start && !lines[end - 1]) end--;
+    if (start === end) return "";
+    const indent = lines[start].match(/^[ \t]*/)[0];
+    // Interpolated list lines can already be flush left while the template is indented.
+    return lines.slice(start, end).map(line =>
+        line.startsWith(indent) ? line.slice(indent.length) : line
+    ).join("\n");
+}
+
+export function renderablePatchOptions(options) {
+    return Array.isArray(options)
+        ? options.filter(option => option && typeof option === "object" && !Array.isArray(option))
+        : [];
+}
+
 // Group normalized patch compatibility without turning empty restrictions into universal patches.
 export function groupBundlePatches(patches, apps = []) {
     const metadata = new Map(apps.map(app => [app.package_name, app]));

@@ -372,6 +372,28 @@ export class Catalog {
       ...bundleImages({ ...bundle, source: sources.get(bundle.source_id) })
     }));
   }
+  async changelogBundles() {
+    this.changelogIndex ??= (async () => {
+      // D1 bootstraps only current bundles. Read the full index on older snapshots.
+      const compact = Boolean(this.manifest.files["changelogs.json"]);
+      const [index, sources] = await Promise.all([
+        this.file(compact ? "changelogs.json" : "bundles.json"), this.sources()
+      ]);
+      const byId = new Map(sources.filter(source => source.enabled !== false)
+        .map(source => [source.id, source]));
+      const rows = compact ? index.rows.map(values =>
+        Object.fromEntries(index.columns.map((column, i) => [column, values[i]]))
+      ) : index.filter(bundle => bundle.availability !== "unavailable" && bundle.description?.trim());
+      return rows.flatMap(bundle => {
+        const source = byId.get(bundle.source_id);
+        return source ? [{ ...bundle, source, bundle_type: canonicalBundleType(bundle.bundle_type) }] : [];
+      });
+    })().catch(error => {
+      this.changelogIndex = null;
+      throw error;
+    });
+    return this.changelogIndex;
+  }
   async patchRows({ q = "", package: packageName, bundle_id: bundleId, bundle_ids: bundleIds, page_cursor = 0,
                     page_count = 12, all = false, include_unverified = false, patch_id: patchId, patch_ids: patchIds,
                     compact_bundles = false, bundle_rows: bundleRows, reverse_pages = false } = {}) {

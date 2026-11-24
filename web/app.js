@@ -11,8 +11,10 @@ import { filterApps } from "./shared/apps.js";
 import { createBrowsePreferences } from "./shared/preferences.js";
 import { createSiteNavigation } from "./shared/site-navigation.js";
 import { createDetailsBrowser, renderPatchOptions } from "./shared/detail-browser.js";
+import { formatPatchDescription } from "./shared/details.js";
 import { iconAction, importFormatAction, bindActions } from "./shared/actions.js";
-import { createSourcePicker } from "./shared/source-picker.js";
+import { createFilterPicker } from "./shared/source-picker.js";
+import { renderChangelogCalendar } from "./shared/changelog-calendar.js";
 import { gitHosts } from "./shared/hosts.js";
 import { latestReleaseIds, catalogStats, historicalCatalogStats, repositoryNames, matchesReleaseFilter, countLabel, patchDisplayName, reseamInternalSearchAlias } from "./shared/site.js";
 import {
@@ -29,11 +31,17 @@ const sourceFilter = document.getElementById("source-filter");
 const bundleVersionFilter = document.getElementById("bundle-version-filter");
 const bundleTypeFilter = document.getElementById("bundle-type-filter");
 const results = document.getElementById("results");
+const releaseFeed = document.getElementById("release-feed");
+const CHANGELOG_DAYS_PER_PAGE = 14;
+let releaseFeedLimit = CHANGELOG_DAYS_PER_PAGE;
+let displayedChangelogFilters, repaintChangelogs;
+const changelogCalendarState = { month: "", day: "" };
 const status = document.getElementById("status");
 const retry = document.getElementById("catalog-retry");
 const resetFilters = document.getElementById("reset-filters");
 const statsPanel = document.getElementById("catalog-stats");
 const viewToggle = document.getElementById("view-toggle");
+const calendarToggle = document.getElementById("calendar-toggle");
 const container = document.querySelector(".container");
 const filterButtons = document.querySelectorAll(".filter-btn");
 const adminAccess = document.getElementById("admin-access");
@@ -208,14 +216,23 @@ let refreshingCatalog = false;
 const detailsBrowser = createDetailsBrowser({
     getApplications: () => applications,
     getSummaries: () => summaries, transformBundle, bundlePatches, bundleChangelog, renderMarkdown, renderPatch,
+    comparisonReleases, comparisonPatches,
     escapeHtml, installAvatarFallback, formatDate,
     getApi: () => siteConfig.api,
-    onNavigate: detail => writeNavigation({ detail }, { userAction: true }),
+    onNavigate: (detail, { replace = false } = {}) =>
+        writeNavigation({ detail }, { replace, userAction: !replace }),
     onClose: () => writeNavigation({ detail: null }, { userAction: true })
 });
-const sourcePicker = createSourcePicker({
+const sourcePicker = createFilterPicker({
     button: document.getElementById("source-picker"), select: sourceFilter,
-    onSelect: selectSource, escapeHtml
+    label: "Choose a source", searchLabel: "Search repositories or hosts", showValue: true, reselect: true
+});
+const versionPicker = createFilterPicker({
+    button: document.getElementById("bundle-version-picker"), select: bundleVersionFilter,
+    label: "Choose a bundle version", searchLabel: "Search versions"
+});
+const typePicker = createFilterPicker({
+    button: document.getElementById("bundle-type-picker"), select: bundleTypeFilter, label: "Choose a bundle type"
 });
 const renderAfterInput = debounce(() => { void renderFilteredBundles(); }, 150);
 adminAccess.textContent = "Manage sources";
@@ -263,28 +280,39 @@ async function restoreNavigation(route) {
     // person's saved filters from this browser.
     route ??= { tab: "bundles", browse: { release: "latest" }, detail: null };
     browsePreferences.save(route.tab, route.browse);
-    selectTab(route.tab, { render: false, initial: true, updateUrl: false });
+    const historyPending = Boolean(route.browse.source && catalog?.historyBundles);
+    selectTab(route.tab, { render: false, initial: true, updateUrl: false, historyPending });
     if (!catalog) return;
-    try {
-        const sources = new Set([route.browse.source, route.detail?.source].filter(Boolean));
+    const detail = route.detail;
+    const openBeforeHistory = route.tab === "changelogs" && detail?.kind === "bundle";
+    const selection = sourceSelection;
+    const restoreBrowse = async () => {
+        // A changelog link carries the bundle ID. Its source history is only needed
+        // for an explicit browse filter or if the linked ID is no longer available.
+        const sources = new Set([route.browse.source, openBeforeHistory ? "" : detail?.source].filter(Boolean));
+        if (route.browse.source && catalog.historyBundles) status.textContent = "Loading source versions...";
         let historyUnavailable = false;
         for (const source of sources) {
             if (!catalog.historyBundles) continue;
             try {
                 const history = await catalog.historyBundles(source);
-                if (sequence !== navigationRevision) return;
+                if (selection !== sourceSelection) return;
                 summaries = mergeBundles(summaries, history);
             } catch (error) {
-                if (await recoverRoute(error, sequence, route)) return;
+                if (selection !== sourceSelection) return;
+                if (sequence === navigationRevision && await recoverRoute(error, sequence, route)) return;
                 historyUnavailable = true;
             }
         }
-        if (sequence !== navigationRevision) return;
+        if (selection !== sourceSelection) return;
         restoreBrowsePreferences();
+        const restoredSelection = sourceSelection;
         await renderFilteredBundles({ updateUrl: false });
+        if (historyUnavailable && restoredSelection === sourceSelection)
+            showHistoryWarning("Reload this link to retry.");
+    };
+    const openDetail = async () => {
         if (sequence !== navigationRevision) return;
-        if (historyUnavailable) showHistoryWarning("Reload this link to retry.");
-        const detail = route.detail;
         if (detail?.kind === "app") {
             const app = applications.find(app => app.package_name === detail.package);
             if (!app) throw new Error("This app is no longer in the catalog");
@@ -295,20 +323,39 @@ async function restoreNavigation(route) {
             const selected = filterApps([app], eligible)[0] || app;
             detailsBrowser.openApp(selected, { notify: false });
         } else if (detail?.kind === "bundle") {
-            let bundle = summaries.find(bundle => bundle.id === detail.id);
-            bundle ??= summaries.find(bundle => detail.source && detail.version &&
+            const replacement = rows => detail.source && detail.version && rows.find(bundle =>
                 bundle.source.url === detail.source && bundle.version === detail.version);
+            let bundle = summaries.find(bundle => bundle.id === detail.id);
+            if (!openBeforeHistory || !catalog.historyBundles) bundle ||= replacement(summaries);
             if (!bundle) {
                 // Static indexes already contain every visible bundle. Do not
                 // bypass disabled-source filtering through a raw catalog file.
                 if (!catalog.historyBundles) throw new Error("This bundle is no longer in the catalog");
-                bundle = await catalog.file("bundles/" + detail.id + ".json");
+                try {
+                    bundle = await catalog.file("bundles/" + detail.id + ".json");
+                } catch (error) {
+                    if (!openBeforeHistory || error.status !== 404 || error.generationUnavailable ||
+                        !detail.source || !detail.version || sequence !== navigationRevision) throw error;
+                    bundle = replacement(summaries) || replacement(await catalog.historyBundles(detail.source));
+                    if (!bundle) throw error;
+                }
                 if (sequence !== navigationRevision) return;
             }
-            await detailsBrowser.openBundle(transformBundle(bundle), { section: detail.section, notify: false });
+            await detailsBrowser.openBundle(transformBundle(bundle),
+                { section: detail.section, baseline: detail.baseline, notify: false });
+        }
+    };
+    const browse = restoreBrowse();
+    try {
+        if (openBeforeHistory) await Promise.all([browse, openDetail()]);
+        else {
+            await browse;
+            await openDetail();
         }
     } catch (error) {
         if (await recoverRoute(error, sequence, route)) return;
+        if (openBeforeHistory) await Promise.allSettled([browse]);
+        if (sequence !== navigationRevision) return;
         status.textContent = "Unable to open shared link: " + error.message;
     }
 }
@@ -320,7 +367,7 @@ function updateReleaseControls() {
     }
 }
 
-function restoreBrowsePreferences() {
+function restoreBrowsePreferences(historyPending = false) {
     sourceSelection++;
     const saved = browsePreferences.read(currentTab);
     input.value = saved.search;
@@ -338,8 +385,9 @@ function restoreBrowsePreferences() {
     sourceVersions = summaries.filter(bundle => bundle.source.url === currentSourceUrl).sort(compareReleaseDates);
     if (catalog) {
         reconcileSourceSelection();
-        populateBundleTypeOptions();
-        populateVersionOptions();
+        historyPending &&= Boolean(currentSourceUrl);
+        populateBundleTypeOptions(historyPending);
+        populateVersionOptions(historyPending);
         // Removed releases or changed filters must not restore an invisible selection.
         if (![...bundleVersionFilter.options].some(option => option.value === currentBundleVersion))
             currentBundleVersion = "";
@@ -347,19 +395,20 @@ function restoreBrowsePreferences() {
     }
     sourceFilter.value = currentSourceUrl;
     sourcePicker.sync();
-    setVersionControlsEnabled(Boolean(currentSourceUrl));
+    setVersionControlsEnabled(Boolean(currentSourceUrl) && !historyPending);
     allBundles = currentBundleVersion
         ? sourceVersions.filter(bundle => bundle.version === currentBundleVersion).map(transformBundle) : latestBundles;
 }
 const catalogTabs = [...document.querySelectorAll(".catalog-tab")];
-function selectTab(tab, { render = true, initial = false, updateUrl = true } = {}) {
+function selectTab(tab, { render = true, initial = false, updateUrl = true, historyPending = false } = {}) {
     if (!initial) {
         saveBrowsePreferences({ updateUrl: false });
         detailsBrowser.close({ notify: false });
     }
+    const previousSource = currentSourceUrl;
     currentTab = tab;
     browsePreferences.activate(tab);
-    restoreBrowsePreferences();
+    restoreBrowsePreferences(historyPending);
     catalogTabs.forEach(button => {
         const selected = button.id === tab + "-tab";
         button.classList.toggle("active", selected);
@@ -370,21 +419,40 @@ function selectTab(tab, { render = true, initial = false, updateUrl = true } = {
     document.getElementById("bundle-version-field").hidden = tab === "apps";
     document.querySelector(".filter-row").classList.toggle("apps-filters", tab === "apps");
     document.getElementById("apps-note").hidden = tab !== "apps";
-    input.placeholder = tab === "apps" ? "Search by app or package" : "Search bundles or patches";
-    input.setAttribute("aria-label", tab === "apps" ? "Search apps" : "Search bundles");
+    const changelogs = tab === "changelogs";
+    viewToggle.hidden = changelogs;
+    calendarToggle.hidden = !changelogs;
+    calendarToggle.setAttribute("aria-pressed", String(browsePreferences.changelogCalendar));
+    packageFilter.hidden = changelogs;
+    input.placeholder = changelogs ? "Search changelogs by source or version" :
+        tab === "apps" ? "Search by app or package" : "Search bundles or patches";
+    input.setAttribute("aria-label", changelogs ? "Search changelogs" : tab === "apps" ? "Search apps" : "Search bundles");
+    track.hidden = changelogs;
+    releaseFeed.hidden = !changelogs;
+    if (!changelogs || currentSourceUrl !== previousSource) {
+        releaseFeed.replaceChildren();
+        repaintChangelogs = undefined;
+    }
     clearVirtualizer();
     if (updateUrl && !initial) writeNavigation({ detail: null }, { userAction: true });
-    if (render) void renderFilteredBundles();
+    if (render) {
+        const browse = browsePreferences.read(tab);
+        if (browse.source && catalog?.historyBundles)
+            void restoreNavigation({ tab, browse, detail: null });
+        else void renderFilteredBundles();
+    }
 }
 catalogTabs.forEach((button, index) => {
     button.addEventListener("click", () => {
-        const tab = button.id === "apps-tab" ? "apps" : "bundles";
+        const tab = button.id.replace(/-tab$/, "");
         if (tab !== currentTab) selectTab(tab);
     });
     button.addEventListener("keydown", event => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
-        const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+        const last = catalogTabs.length - 1;
+        const next = event.key === "Home" ? 0 : event.key === "End" ? last :
+            (index + (event.key === "ArrowLeft" ? -1 : 1) + catalogTabs.length) % catalogTabs.length;
         catalogTabs[next].click();
         catalogTabs[next].focus();
     });
@@ -436,6 +504,13 @@ viewToggle.addEventListener("click", () => {
     updateStatus();
 });
 
+calendarToggle.addEventListener("click", () => {
+    const enabled = !browsePreferences.changelogCalendar;
+    browsePreferences.setChangelogCalendar(enabled);
+    calendarToggle.setAttribute("aria-pressed", String(enabled));
+    repaintChangelogs?.({ preserveRetry: true });
+});
+
 addEventListener("resize", () => {
     const columns = layoutColumns();
     if (virtualizer && columns !== lastColumns) setupVirtualizer(currentAnchorBundleIndex());
@@ -474,7 +549,8 @@ resetFilters.addEventListener("click", () => {
 async function loadBundles(refreshedCatalog = null) {
     if (!refreshedCatalog) {
         retry.hidden = true;
-        status.textContent = currentTab === "apps" ? "Loading apps..." : "Loading bundles...";
+        status.textContent = currentTab === "changelogs" ? "Loading changelogs..." :
+            currentTab === "apps" ? "Loading apps..." : "Loading bundles...";
         if (!catalog) statsPanel.textContent = "Loading catalog statistics...";
     }
     try {
@@ -483,13 +559,15 @@ async function loadBundles(refreshedCatalog = null) {
         siteConfig = await configuration.json();
         const nextCatalog = refreshedCatalog ||
             await openCatalog();
-        const sources = [...new Set(["bundles", "apps"].map(tab => browsePreferences.read(tab).source).filter(Boolean))];
+        const sources = [...new Set(["bundles", "apps", currentTab].map(tab => browsePreferences.read(tab).source).filter(Boolean))];
         const [latest, nextApplications] = await Promise.all([
             nextCatalog.bundles(), nextCatalog.apps()
         ]);
+        const initialRoute = !navigationReady && navigation.read();
+        const openChangelog = initialRoute?.tab === "changelogs" && initialRoute.detail?.kind === "bundle";
         let nextSummaries = latest;
         const missingHistory = new Set();
-        if (nextCatalog.historyBundles) {
+        if (nextCatalog.historyBundles && !openChangelog) {
             const histories = await Promise.allSettled(sources.map(source => nextCatalog.historyBundles(source)));
             histories.forEach((history, index) => {
                 if (history.status === "fulfilled") nextSummaries = mergeBundles(nextSummaries, history.value);
@@ -509,6 +587,13 @@ async function loadBundles(refreshedCatalog = null) {
                 a.sourceUrl.localeCompare(b.sourceUrl));
         populateSourceOptions();
         restoreBrowsePreferences();
+        if (openChangelog) {
+            // Restore the selected source behind the shared detail. Other tabs
+            // restore their source history when they are selected.
+            navigationReady = true;
+            await restoreNavigation(initialRoute);
+            return true;
+        }
         await renderFilteredBundles({ resetScroll: !refreshedCatalog });
         if (missingHistory.has(currentSourceUrl)) showHistoryWarning("Select the source again to retry.");
         if (!navigationReady) {
@@ -566,6 +651,13 @@ async function selectSource(sourceUrl) {
     resetBundleSelection();
     sourceFilter.value = sourceUrl;
     sourcePicker.sync();
+    if (sourceUrl !== currentSourceUrl) {
+        sourceVersions = [];
+        if (currentTab === "changelogs") {
+            releaseFeed.replaceChildren();
+            repaintChangelogs = undefined;
+        }
+    }
     currentSourceUrl = sourceUrl;
     setVersionControlsEnabled(false);
 
@@ -637,6 +729,37 @@ async function bundlePatches(bundle) {
     }
 }
 
+async function comparisonReleases(bundle) {
+    const activeCatalog = catalog;
+    const history = activeCatalog.historyBundles
+        ? await activeCatalog.historyBundles(bundle.sourceUrl)
+        : summaries;
+    const releases = history.filter(item => item.source?.url === bundle.sourceUrl &&
+        item.bundle_type === bundle.bundleType).sort(compareReleaseDates);
+    const currentIndex = releases.findIndex(item => item.id === bundle.id);
+    const baseline = releases.slice(currentIndex + 1).find(item =>
+        item.patch_list_available && item.metadata_status === "verified");
+    if (catalog !== activeCatalog) throw new Error("The catalog changed. Retry to load the current releases.");
+    if (currentIndex < 0 || !releases[currentIndex].patch_list_available || releases[currentIndex].metadata_status !== "verified")
+        throw new Error("Verified patch metadata is unavailable for this release in the current catalog.");
+    return {
+        generation: activeCatalog.manifest.generation,
+        candidates: releases.filter(item => item.id !== bundle.id &&
+            item.patch_list_available && item.metadata_status === "verified").map(transformBundle),
+        defaultId: baseline?.id
+    };
+}
+
+async function comparisonPatches(bundle, baseline, generation) {
+    const original = catalog;
+    if (original.manifest.generation !== generation)
+        throw new Error("The catalog changed. Retry to compare the current metadata.");
+    const results = await Promise.all([bundle, baseline].map(item =>
+        bundlePatches({ id: item.id })));
+    if (catalog !== original) throw new Error("The catalog changed. Retry to compare the current metadata.");
+    return results;
+}
+
 async function bundleChangelog(bundle) {
     const path = "bundles/" + bundle.id + ".json";
     try { return (await catalog.file(path)).description; }
@@ -697,21 +820,23 @@ function reconcileSourceSelection() {
     sourcePicker.sync();
 }
 
-function populateBundleTypeOptions() {
+function populateBundleTypeOptions(preserveSelection = false) {
     const selectedType = currentBundleType;
     const types = new Set(latestBundles.map(bundle => bundle.bundleType).filter(Boolean));
     sourceVersions.forEach(bundle => {
         if (bundle.bundle_type) types.add(bundle.bundle_type);
     });
 
+    if (preserveSelection && selectedType) types.add(selectedType);
     const options = [new Option("All types", "")];
     [...types].sort().forEach(type => options.push(new Option(bundleTypeLabel(type), type)));
     bundleTypeFilter.replaceChildren(...options);
     currentBundleType = types.has(selectedType) ? selectedType : "";
     bundleTypeFilter.value = currentBundleType;
+    typePicker.sync();
 }
 
-function populateVersionOptions() {
+function populateVersionOptions(preserveSelection = false) {
     const options = [new Option("All versions", "")];
     const versions = new Map();
     sourceVersions
@@ -724,17 +849,22 @@ function populateVersionOptions() {
         options.push(new Option(`${version} · ${isPrerelease ? "Prerelease" : "Release"}`, version));
     });
 
+    if (preserveSelection && currentBundleVersion && !versions.has(currentBundleVersion))
+        options.push(new Option(currentBundleVersion, currentBundleVersion));
     bundleVersionFilter.replaceChildren(...options);
     bundleVersionFilter.value = currentBundleVersion;
+    versionPicker.sync();
 }
 
 function setVersionControlsEnabled(enabled) {
     bundleVersionFilter.disabled = !enabled;
+    versionPicker.sync();
 }
 
 function resetBundleSelection() {
     currentBundleVersion = "";
     bundleVersionFilter.value = "";
+    versionPicker.sync();
     allBundles = latestBundles;
 }
 
@@ -745,7 +875,7 @@ function installAvatarFallback(card, label) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#eee" width="100" height="100"/><text x="50" y="50" font-size="40" text-anchor="middle" dy=".3em" fill="#999">${initial}</text></svg>`;
     if (!image.getAttribute("src")) image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
     const fallback = () => {
-        image.closest(".owner-avatar-link")?.classList.remove("bundle-icon");
+        image.closest(".owner-avatar-link, .release-entry-icon")?.classList.remove("bundle-icon");
         const owner = card.dataset.ownerAvatar;
         if (owner && image.src !== owner) {
             delete card.dataset.ownerAvatar;
@@ -779,6 +909,217 @@ function transformBundle(bundle) {
     };
 }
 
+async function renderReleaseFeed(sequence) {
+    const active = catalog, source = currentSourceUrl;
+    const filters = JSON.stringify([source, currentBundleVersion, currentBundleType, currentFilter, currentSearchQuery]);
+    const staleStatus = "Unable to refresh changelog history. Showing previous results.";
+    const current = () => sequence === searchSequence && currentTab === "changelogs" &&
+        catalog === active && currentSourceUrl === source;
+    let rows;
+    try {
+        rows = await active.changelogBundles();
+    } catch (error) {
+        if (!current()) return;
+        if (await recoverGeneration(error) || !current()) return;
+        const keepResults = filters === displayedChangelogFilters && Boolean(releaseFeed.querySelector(".release-day, .changelog-calendar"));
+        const previousRetry = releaseFeed.querySelector(".release-feed-retry");
+        const retryFocused = previousRetry === document.activeElement;
+        if (keepResults) previousRetry?.remove();
+        else {
+            displayedChangelogFilters = undefined;
+            repaintChangelogs = undefined;
+            releaseFeed.replaceChildren();
+        }
+        status.textContent = keepResults ? staleStatus : "Unable to load changelog history. Please try again.";
+        const reload = document.createElement("button");
+        reload.className = "admin-access release-more release-feed-retry";
+        reload.id = "release-feed-retry";
+        reload.type = "button";
+        reload.textContent = "Retry loading changelogs";
+        reload.addEventListener("click", () => { void renderFilteredBundles({ resetScroll: false }); });
+        if (keepResults) releaseFeed.prepend(reload);
+        else releaseFeed.append(reload);
+        if (retryFocused) reload.focus({ preventScroll: true });
+        return;
+    }
+    if (!current()) return;
+    const matching = rows.filter(row =>
+        (!source || row.source.url === source) &&
+        (!currentBundleVersion || row.version === currentBundleVersion) &&
+        (!currentBundleType || row.bundle_type === currentBundleType) &&
+        matchesReleaseFilter({ isLatest: currentLatestIds.has(row.id), isPrerelease: row.is_prerelease }, currentFilter) &&
+        (!currentSearchQuery || [sourceOptionLabel({
+            sourceUrl: row.source.url,
+            ownerName: row.source.source_metadatum?.owner_name,
+            repoName: row.source.source_metadatum?.repo_name
+        }), row.source.url, row.version, bundleTypeLabel(row.bundle_type)]
+            .join(" ").toLowerCase().includes(currentSearchQuery))
+    ).map(row => ({ row, timestamp: releaseTimestamp(row.created_at) }))
+        .sort((a, b) => b.timestamp - a.timestamp ||
+            a.row.source.url.localeCompare(b.row.source.url) || a.row.id.localeCompare(b.row.id));
+    const dayFormat = new Intl.DateTimeFormat(undefined,
+        { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const timeFormat = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+    const byDay = new Map();
+    for (const release of matching) {
+        const day = Number.isFinite(release.timestamp) ? localDayKey(new Date(release.timestamp)) : "unknown";
+        if (!byDay.has(day)) byDay.set(day, []);
+        byDay.get(day).push(release);
+    }
+    const renderEntry = ({ row, timestamp }) => renderReleaseEntry(transformBundle(row),
+        Number.isFinite(timestamp) ? { iso: new Date(timestamp).toISOString(), label: timeFormat.format(timestamp) } : null);
+
+    const paint = ({ preserveRetry = false } = {}) => {
+        displayedChangelogFilters = filters;
+        const focus = document.activeElement;
+        const focusedId = releaseFeed.contains(focus) ? focus.id : "";
+        const focusedDayId = focusedId && focus.closest(".release-day")?.firstElementChild.id;
+        const retry = preserveRetry && releaseFeed.querySelector(".release-feed-retry");
+        if (retry) releaseFeed.replaceChildren(retry);
+        else releaseFeed.replaceChildren();
+
+        const total = countLabel(matching.length, "changelog");
+        const updateStatus = count => {
+            status.textContent = !byDay.size ? "No changelogs match the selected filters." :
+                releaseFeed.querySelector(".release-feed-retry") ? `${staleStatus} ${count}` : count;
+            resetFilters.hidden = byDay.size > 0;
+        };
+        const calendar = browsePreferences.changelogCalendar &&
+            renderChangelogCalendar(releaseFeed, byDay, { state: changelogCalendarState, dayFormat, renderEntry });
+        if (calendar) {
+            if (byDay.has("unknown")) releaseFeed.append(renderReleaseDay("unknown", byDay.get("unknown"), dayFormat, renderEntry));
+            updateStatus(total);
+        } else {
+            const days = [...byDay];
+            const more = document.createElement("button");
+            more.className = "admin-access release-more";
+            more.id = "release-feed-more";
+            more.type = "button";
+            more.textContent = "Show older days";
+            let shown = 0;
+            function appendDays(limit) {
+                let firstNew;
+                more.remove();
+                while (shown < Math.min(limit, days.length)) {
+                    const [day, releases] = days[shown++];
+                    const group = renderReleaseDay(day, releases, dayFormat, renderEntry);
+                    releaseFeed.append(group);
+                    firstNew ??= group.firstElementChild;
+                }
+                updateStatus(`${total} · Showing ${shown.toLocaleString()} of ${countLabel(days.length, "day")}`);
+                if (shown < days.length) releaseFeed.append(more);
+                return firstNew;
+            }
+            more.addEventListener("click", () => {
+                releaseFeedLimit += CHANGELOG_DAYS_PER_PAGE;
+                const firstNew = appendDays(releaseFeedLimit);
+                firstNew?.focus({ preventScroll: true });
+                firstNew?.scrollIntoView({ block: "nearest" });
+            });
+            appendDays(releaseFeedLimit);
+        }
+        if (focusedId) {
+            const target = document.getElementById(focusedId) || (focusedDayId && document.getElementById(focusedDayId)) ||
+                releaseFeed.querySelector(".release-day > summary, .changelog-calendar-cell[aria-pressed='true']") ||
+                (calendar ? calendarToggle : document.getElementById("changelogs-tab"));
+            target.focus({ preventScroll: true });
+        }
+    };
+    repaintChangelogs = paint;
+    const monthPicker = releaseFeed.querySelector(".changelog-calendar .filter-popover");
+    if (!monthPicker?.matches(":popover-open")) {
+        paint();
+        return;
+    }
+    // Let a viewer finish using the month picker before rebuilding its controls.
+    function paintAfterMonthPickerCloses(event) {
+        if (event.newState !== "closed") return;
+        monthPicker.removeEventListener("toggle", paintAfterMonthPickerCloses);
+        if (monthPicker.isConnected && current() && repaintChangelogs === paint) paint();
+    }
+    monthPicker.addEventListener("toggle", paintAfterMonthPickerCloses);
+}
+
+function localDayKey(date) {
+    return [String(date.getFullYear()).padStart(4, "0"), String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+function relativeDayLabel(day) {
+    const today = new Date();
+    if (day === localDayKey(today)) return "Today";
+    today.setDate(today.getDate() - 1);
+    return day === localDayKey(today) ? "Yesterday" : "";
+}
+
+function renderReleaseDay(day, releases, dayFormat, renderEntry) {
+    const group = document.createElement("details");
+    group.className = "release-day";
+    group.open = browsePreferences.isChangelogDayOpen(day);
+    const summary = document.createElement("summary");
+    summary.id = "changelog-day-" + day;
+    const title = document.createElement("h2");
+    if (day === "unknown") title.textContent = "Date unavailable";
+    else {
+        const date = document.createElement("time");
+        date.dateTime = day;
+        date.textContent = dayFormat.format(releases[0].timestamp);
+        title.append(date);
+        const relative = relativeDayLabel(day);
+        if (relative) {
+            const tag = document.createElement("span");
+            tag.className = "release-day-relative";
+            tag.textContent = relative;
+            title.append(" ", tag);
+        }
+    }
+    const count = document.createElement("span");
+    count.className = "release-day-count";
+    count.textContent = countLabel(releases.length, "changelog");
+    summary.append(title, count);
+    const entries = document.createElement("div");
+    entries.className = "release-day-entries";
+    function renderEntries() {
+        if (group.open && !entries.hasChildNodes()) entries.append(...releases.map(renderEntry));
+    }
+    group.addEventListener("toggle", () => {
+        if (!group.isConnected) return;
+        browsePreferences.setChangelogDayOpen(day, group.open);
+        renderEntries();
+    });
+    group.append(summary, entries);
+    renderEntries();
+    return group;
+}
+
+function renderReleaseEntry(bundle, time) {
+    const entry = document.createElement("article");
+    entry.className = "release-entry";
+    const name = sourceOptionLabel(bundle);
+    const icon = bundle.iconUrl || bundle.ownerAvatarUrl;
+    if (bundle.ownerAvatarUrl && icon !== bundle.ownerAvatarUrl) entry.dataset.ownerAvatar = bundle.ownerAvatarUrl;
+    entry.innerHTML = `<span class="release-entry-icon${icon !== bundle.ownerAvatarUrl ? " bundle-icon" : ""}">
+            <img class="owner-avatar" src="${escapeHtml(icon)}" alt="" loading="lazy" decoding="async"></span>
+        <div class="release-entry-title">
+            <h3>${escapeHtml(name)}</h3>
+            <div class="release-entry-meta">
+                <strong>${escapeHtml(bundle.version)}</strong>
+                <span class="bundle-badge ${bundle.isPrerelease ? "badge-prerelease" : "badge-release"}">${bundle.isPrerelease ? "Prerelease" : "Release"}</span>
+                <span class="bundle-badge badge-type">${escapeHtml(bundleTypeLabel(bundle.bundleType))}</span>
+                ${time ? `<time datetime="${time.iso}">${escapeHtml(time.label)}</time>` : ""}
+            </div>
+        </div>
+        <button class="card-toggle" type="button" aria-haspopup="dialog"
+            aria-label="Read changelog for ${escapeHtml(name + " " + bundle.version)}">Read changelog</button>`;
+    installAvatarFallback(entry, name);
+    const button = entry.querySelector("button");
+    button.id = "read-changelog-" + bundle.id;
+    button.addEventListener("click", () => {
+        void detailsBrowser.openBundle(bundle, { section: "changelog" });
+    });
+    return entry;
+}
+
 function resetResultsScroll() {
     const top = status.getBoundingClientRect().top;
     if (top < 0) window.scrollBy(0, top);
@@ -789,6 +1130,14 @@ async function renderFilteredBundles({ resetScroll = true, updateUrl = true, use
     if (!catalog) return;
     resetFilters.hidden = true;
     const sequence = ++searchSequence;
+    if (currentTab === "changelogs") {
+        if (resetScroll) releaseFeedLimit = CHANGELOG_DAYS_PER_PAGE;
+        if (currentSourceUrl && bundleVersionFilter.disabled) return;
+        if (!releaseFeed.hasChildNodes()) status.textContent = "Loading changelog history...";
+        await renderReleaseFeed(sequence);
+        if (resetScroll && sequence === searchSequence) resetResultsScroll();
+        return;
+    }
     if (currentTab === "apps") {
         try { renderFilteredApps(resetScroll); }
         catch (error) {
@@ -1187,17 +1536,24 @@ function renderBundle(bundle, target) {
 
 function renderPatch(patch) {
     const packages = (patch.compatiblePackages || []).map(pkg => {
-        const versionsText = pkg.versions?.filter(Boolean).join(', ') || 'all versions';
+        const versions = pkg.versions?.filter(Boolean) || [];
+        const packageId = escapeHtml(pkg.name).replaceAll(".", ".<wbr>");
+        const distinctName = pkg.appName && pkg.appName !== pkg.name;
         return `<span class="package-tag">
-            <span class="package-name">${escapeHtml(pkg.appName || pkg.name)}</span>
-            ${pkg.appName && pkg.appName !== pkg.name ? `<span class="package-id">${escapeHtml(pkg.name)}</span>` : ""}
-            <span class="package-versions">${escapeHtml(versionsText)}</span>
+            <span class="package-identity">
+                <span class="package-name">${distinctName ? escapeHtml(pkg.appName) : packageId}</span>
+                ${distinctName ? `<span class="package-id">${packageId}</span>` : ""}
+            </span>
+            ${versions.length ? `<span class="package-versions" role="list" aria-label="Compatible versions">
+                ${versions.map(version => `<span class="package-version" role="listitem">${escapeHtml(version)}</span>`).join(" ")}
+            </span>` : '<span class="package-version">All versions</span>'}
         </span>`;
     }).join('');
 
     const heading = escapeHtml(patchDisplayName(patch)) +
         (patch.hidden ? ' <span class="badge">Internal patch</span>' : "");
-    const overview = `${patch.description ? `<span class="patch-description">${escapeHtml(patch.description)}</span>` : ""}
+    const description = formatPatchDescription(patch.description);
+    const overview = `${description ? `<span class="patch-description">${escapeHtml(description)}</span>` : ""}
         ${packages ? `<span class="patch-packages">${packages}</span>` : ""}`;
     const options = renderPatchOptions(patch.options, escapeHtml, heading, overview);
     return `<div class="patch-item">${options || `<div class="patch-name">${heading}</div>${overview}`}</div>`;
@@ -1247,9 +1603,8 @@ function debounce(callback, delay) {
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 function renderMarkdown(text) {

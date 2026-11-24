@@ -2,6 +2,41 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 import {d1Fixture} from "./d1-fixture.js";
+import {ApiCatalog} from "../../shared/api-catalog.js";
+
+test("The changelog index reads historical releases without loading full notes", async () => {
+  const catalog = new ApiCatalog("https://api.test");
+  catalog.manifest = {files: {"changelogs.json": {}}};
+  const source = {id:"source", url:"https://github.com/team/patches", enabled:true};
+  const files = [];
+  catalog.file = async name => {
+    files.push(name);
+    if (name === "sources.json") return [source,{id:"disabled",enabled:false}];
+    assert.equal(name,"changelogs.json");
+    return {columns:["id","source_id","version","bundle_type"],rows:[
+      ["new","source","v2","Morphe:V1"],["old","source","v1","Morphe:V1"],
+      ["disabled","disabled","v1","Morphe:V1"]
+    ]};
+  };
+  const [rows, concurrent] = await Promise.all([catalog.changelogBundles(),catalog.changelogBundles()]);
+  assert.deepEqual(rows.map(row=>row.id),["new","old"]);
+  assert.equal(rows[1].source,source);
+  assert.equal(rows,concurrent);
+  assert.deepEqual(files,["changelogs.json","sources.json"]);
+});
+
+test("Older D1 snapshots include historical changelogs through the full bundle index", async () => {
+  const catalog = new ApiCatalog("https://api.test");
+  catalog.manifest = {files: {}};
+  catalog.file = async name => {
+    if (name === "sources.json") return [{id:"s",url:"https://github.com/a/b"}];
+    assert.equal(name,"bundles.json");
+    return [{id:"old",source_id:"s",description:"Older notes",is_latest:false},
+      {id:"empty",source_id:"s",description:"  "},
+      {id:"retired",source_id:"s",description:"Notes",availability:"unavailable"}];
+  };
+  assert.deepEqual((await catalog.changelogBundles()).map(row=>row.id),["old"]);
+});
 
 test("D1 REST and GraphQL page all 237 releases with identical metadata",async()=>{
   const fixture=d1Fixture(237);

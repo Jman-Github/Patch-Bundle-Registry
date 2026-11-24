@@ -64,8 +64,10 @@ Changes: GitHub source management, header links, theme controls, application-ver
         <div class="catalog-tabs" role="tablist" aria-label="Browse catalog">
             <button id="bundles-tab" class="catalog-tab active" role="tab" type="button" aria-selected="true" aria-controls="results">Bundles</button>
             <button id="apps-tab" class="catalog-tab" role="tab" type="button" aria-selected="false" aria-controls="results" tabindex="-1">Apps</button>
+            <button id="changelogs-tab" class="catalog-tab" role="tab" type="button" aria-selected="false" aria-controls="results" tabindex="-1">Changelogs</button>
         </div>
             <button id="view-toggle" class="view-toggle" type="button" aria-pressed="true">Grid view</button>
+            <button id="calendar-toggle" class="view-toggle" type="button" aria-controls="release-feed" aria-pressed="false" hidden>Calendar</button>
         </div>
         <p id="apps-note" class="stats-note" hidden>Patches and compatibility are counted across matching bundle versions.</p>
         <div class="search-row">
@@ -86,28 +88,38 @@ Changes: GitHub source management, header links, theme controls, application-ver
         </div>
         <div class="filter-row">
             <div class="filter-field">
-                <span id="source-filter-label">Source</span>
-                <select id="source-filter" hidden aria-hidden="true" tabindex="-1">
+                <label id="source-filter-label" for="source-filter">Source</label>
+                <select id="source-filter">
                     <option value="">All sources</option>
                 </select>
-                <button id="source-picker" type="button" aria-labelledby="source-filter-label source-picker-value"
-                    aria-haspopup="dialog" aria-expanded="false">
-                    <span id="source-picker-value" data-source-label>All sources</span>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2"/></svg>
+                <button id="source-picker" class="filter-picker" type="button" aria-labelledby="source-filter-label source-picker-value"
+                    aria-haspopup="dialog" aria-expanded="false" hidden>
+                    <span id="source-picker-value" data-picker-value>All sources</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
             </div>
-            <label id="bundle-version-field" class="filter-field">
-                <span>Bundle version</span>
+            <div id="bundle-version-field" class="filter-field">
+                <label for="bundle-version-filter" id="bundle-version-filter-label">Bundle version</label>
                 <select id="bundle-version-filter" disabled>
                     <option value="">All versions</option>
                 </select>
-            </label>
-            <label class="filter-field">
-                <span>Bundle type</span>
+                <button id="bundle-version-picker" class="filter-picker" type="button" aria-labelledby="bundle-version-filter-label bundle-version-picker-value"
+                    aria-haspopup="dialog" aria-expanded="false" hidden disabled>
+                    <span id="bundle-version-picker-value" data-picker-value>All versions</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+            <div class="filter-field">
+                <label for="bundle-type-filter" id="bundle-type-filter-label">Bundle type</label>
                 <select id="bundle-type-filter">
                     <option value="">All types</option>
                 </select>
-            </label>
+                <button id="bundle-type-picker" class="filter-picker" type="button" aria-labelledby="bundle-type-filter-label bundle-type-picker-value"
+                    aria-haspopup="dialog" aria-expanded="false" hidden>
+                    <span id="bundle-type-picker-value" data-picker-value>All types</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
         </div>
         <div class="filter-buttons">
             <div class="release-filters" role="group" aria-label="Release channel">
@@ -124,6 +136,7 @@ Changes: GitHub source management, header links, theme controls, application-ver
         <div class="visually-hidden" role="status" data-copy-status></div>
         <div id="results" class="grid-view" role="tabpanel" aria-labelledby="bundles-tab">
             <div class="v-track" id="v-track"></div>
+            <section class="release-feed" id="release-feed" aria-label="Release changelogs" hidden></section>
         </div>
         <noscript><p class="catalog-no-script">Enable JavaScript to browse the patch catalog.</p></noscript>
     </main>

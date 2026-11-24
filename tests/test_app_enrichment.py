@@ -68,6 +68,7 @@ def test_extra_markets_recover_a_negative_listing_after_its_base_cache_expires(
 ):
     prepare(tmp_path, ["com.regional"])
     monkeypatch.setattr(metadata, "REPOSITORIES", ())
+    monkeypatch.setattr(metadata, "APKMIRROR_LIMIT", 0)
     calls = []
 
     def handler(request):
@@ -163,6 +164,7 @@ def test_successful_extra_market_remains_preferred_after_positive_cache_expires(
 ):
     prepare(tmp_path, ["com.regional"])
     monkeypatch.setattr(metadata, "REPOSITORIES", ())
+    monkeypatch.setattr(metadata, "APKMIRROR_LIMIT", 0)
     calls = []
 
     def handler(request):

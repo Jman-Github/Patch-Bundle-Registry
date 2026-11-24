@@ -1,7 +1,8 @@
 import { bundleImportPath, reseamNativeImportPath, bundleTypeLabel } from "./catalog.js";
 import { patchMatchesSearch, repositoryNames, countLabel } from "./site.js";
 import { iconAction, importFormatAction, bindActions } from "./actions.js";
-import { groupBundlePatches, filterPatchGroups } from "./details.js";
+import { groupBundlePatches, filterPatchGroups, formatPatchDescription, renderablePatchOptions } from "./details.js";
+import { createReleaseComparison } from "./release-comparison.js";
 
 const disclosureArrow = '<span class="disclosure-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 export function readableOptionType(type) {
@@ -29,26 +30,28 @@ export function readableOptionValue(value, depth = 0) {
     return String(value);
 }
 export function renderPatchOptions(options, escape, heading = "Patch options", overview = "") {
-    options = Array.isArray(options) ? options.filter(option => option && typeof option === "object" && !Array.isArray(option)) : [];
+    options = renderablePatchOptions(options);
     if (!options.length) return "";
     const label = countLabel(options.length, "patch option");
     return `<details class="patch-options"><summary><span class="patch-heading">
         <span class="patch-name">${heading}</span><span class="option-toggle" title="${label}" aria-label="${label}">
             <span class="option-count">${options.length}</span>${disclosureArrow}</span></span>${overview}</summary>
         <div class="patch-options-list" aria-label="${label}">
-        ${options.map(option =>
-            `<div class="patch-option"><strong class="patch-option-heading">${escape(option.title || option.name || option.key || "Option")}</strong>
-                ${option.description ? `<p>${escape(option.description)}</p>` : ""}
+        ${options.map(option => {
+            const description = formatPatchDescription(option.description);
+            return `<div class="patch-option"><strong class="patch-option-heading">${escape(option.title || option.name || option.key || "Option")}</strong>
+                ${description ? `<p class="patch-option-description">${escape(description)}</p>` : ""}
                 <dl><div><dt>Type</dt><dd>${escape(readableOptionType(option.type))}</dd></div>
                     <div><dt>Required</dt><dd>${option.required ? "Yes" : "No"}</dd></div>
                     <div><dt>Default</dt><dd class="option-value">${escape(readableOptionValue(option.default))}</dd></div>
                     ${option.values != null ? `<div><dt>Choices</dt><dd class="option-value">${escape(readableOptionValue(option.values))}</dd></div>` : ""}
-                </dl></div>`).join("")}</div></details>`;
+                </dl></div>`;
+        }).join("")}</div></details>`;
 }
 
 export function createDetailsBrowser({ getApplications, getSummaries, transformBundle,
     bundlePatches, bundleChangelog, renderMarkdown, renderPatch, escapeHtml: escape, installAvatarFallback, formatDate, getApi,
-    onNavigate = () => {}, onClose = () => {} }) {
+    comparisonReleases, comparisonPatches, onNavigate = () => {}, onClose = () => {} }) {
     let dialog, revision = 0, previousFocus;
     function close({ notify = true } = {}) {
         if (!dialog?.open) return;
@@ -73,7 +76,9 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
                 if (dialog.open) return;
                 revision++;
                 document.querySelectorAll(".card-selected").forEach(card => card.classList.remove("card-selected"));
-                if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+                const target = previousFocus?.isConnected ? previousFocus :
+                    previousFocus?.id && document.getElementById(previousFocus.id);
+                if (target && !target.closest("[hidden]")) target.focus({ preventScroll: true });
                 else document.querySelector(".catalog-tab.active")?.focus({ preventScroll: true });
             });
         }
@@ -85,15 +90,17 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
             <p class="app-package">${escape(subtitle)}${copyApp ? iconAction("copy", "Copy package name", escape, {copy:subtitle}) : ""}</p>
             ${description ? `<p class="details-description">${escape(description)}</p>` : ""}</div>
             <button class="dialog-close" type="button" aria-label="Close details">×</button></div>
-            <div class="details-sections" hidden aria-label="Bundle details">
+            <div class="details-sections" hidden role="group" aria-label="Bundle details">
                 <button type="button" data-details-section="patches" aria-pressed="true">Apps and patches</button>
-                <button type="button" data-details-section="changelog" aria-pressed="false">Changelog</button></div>
+                <button type="button" data-details-section="changelog" aria-pressed="false">Changelog</button>
+                <button type="button" data-details-section="compare" aria-pressed="false">Compare patches</button></div>
             <div class="details-toolbar"><input type="search" class="details-search"
                 aria-label="${searchLabel}" placeholder="${searchLabel}">
                 <span class="details-count" aria-live="polite"></span></div>
             <div class="visually-hidden" role="status" data-copy-status></div>
             <div class="details-body"><p role="status">Loading compatibility and patches...</p></div>
-            <div class="details-body details-changelog changelog-content" tabindex="0" aria-label="Release changelog" hidden></div>`;
+            <div class="details-body details-changelog changelog-content" tabindex="0" aria-label="Release changelog" hidden></div>
+            <div class="details-body release-comparison" tabindex="-1" aria-label="Patch comparison" hidden></div>`;
         bindActions(dialog);
         dialog.setAttribute("aria-labelledby", "details-title");
         dialog.querySelector(".dialog-close").addEventListener("click", close);
@@ -105,7 +112,7 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
         return { token: revision, body: dialog.querySelector(".details-body"),
             search: dialog.querySelector(".details-search"), count: dialog.querySelector(".details-count"),
             toolbar: dialog.querySelector(".details-toolbar"), sections: dialog.querySelector(".details-sections"),
-            changelog: dialog.querySelector(".details-changelog") };
+            changelog: dialog.querySelector(".details-changelog"), compare: dialog.querySelector(".release-comparison") };
     }
     function alive(view) { return view.token === revision && dialog.open; }
     function detailError(label, error) {
@@ -137,7 +144,7 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
         element.querySelectorAll(".details-group").forEach(group =>
             installAvatarFallback(group, group.dataset.label || "?"));
     }
-    async function openBundle(bundle, { section = "patches", notify = true } = {}) {
+    async function openBundle(bundle, { section = "patches", baseline = "", notify = true } = {}) {
         const name = repositoryNames(bundle).tracked;
         const view = shell(name, bundle.version + " · " + bundleTypeLabel(bundle.bundleType),
             bundle.iconUrl, bundle.repoDescription, bundle.ownerAvatarUrl);
@@ -189,24 +196,37 @@ export function createDetailsBrowser({ getApplications, getSummaries, transformB
                 void loadChangelog();
             });
         });
-        const patchesButton = view.sections.querySelector('[data-details-section="patches"]');
-        const changelogButton = view.sections.querySelector('[data-details-section="changelog"]');
+        const navigate = (selected, options) => onNavigate({ kind: "bundle", id: bundle.id,
+            source: bundle.sourceUrl, version: bundle.version, section: selected,
+            ...(selected === "compare" && baseline ? { baseline } : {}) }, options);
+        const loadComparison = createReleaseComparison(view.compare, {
+            bundle, getReleases: comparisonReleases, loadPatches: comparisonPatches,
+            escape, formatDate, renderOptions: renderPatchOptions, baselineId: baseline,
+            isCurrent: () => alive(view),
+            onBaselineChange(id, options) {
+                baseline = id;
+                if (!view.compare.hidden && alive(view)) navigate("compare", options);
+            }
+        });
+        const buttons = [...view.sections.querySelectorAll("[data-details-section]")];
         const selectSection = (selected, updateUrl = true) => {
-            if (updateUrl) onNavigate({ kind: "bundle", id: bundle.id,
-                source: bundle.sourceUrl, version: bundle.version, section: selected });
-            const changelog = selected === "changelog";
-            view.body.hidden = changelog;
-            view.toolbar.hidden = changelog;
-            view.changelog.hidden = !changelog;
-            patchesButton.setAttribute("aria-pressed", String(!changelog));
-            changelogButton.setAttribute("aria-pressed", String(changelog));
-            return changelog ? loadChangelog() : loadPatches();
+            if (updateUrl) navigate(selected);
+            view.body.hidden = selected !== "patches";
+            view.toolbar.hidden = selected !== "patches";
+            view.changelog.hidden = selected !== "changelog";
+            view.compare.hidden = selected !== "compare";
+            buttons.forEach(button =>
+                button.setAttribute("aria-pressed", String(button.dataset.detailsSection === selected)));
+            if (selected === "compare") return loadComparison();
+            return selected === "changelog" ? loadChangelog() : loadPatches();
         };
         view.sections.hidden = false;
-        patchesButton.addEventListener("click", () => { void selectSection("patches"); });
-        changelogButton.addEventListener("click", () => { void selectSection("changelog"); });
+        buttons.forEach(button => button.addEventListener("click", () => {
+            const selected = button.dataset.detailsSection;
+            if (button.getAttribute("aria-pressed") !== "true") void selectSection(selected);
+        }));
         const pending = selectSection(section, notify);
-        if (section === "changelog") changelogButton.focus();
+        if (section !== "patches") buttons.find(button => button.dataset.detailsSection === section)?.focus();
         await pending;
     }
     function openApp(app, { notify = true } = {}) {

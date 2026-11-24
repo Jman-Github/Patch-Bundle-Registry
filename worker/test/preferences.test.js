@@ -26,6 +26,31 @@ test("Browsing preferences survive reload with independent tab searches and filt
     reload.read("bundles").search = "mutated";
     assert.equal(reload.read("bundles").search, "Hide Ads");
 });
+test("Changelog days start closed and remember their open state across reloads", () => {
+    const saved = storage(), prefs = createBrowsePreferences(() => saved);
+    assert.equal(prefs.isChangelogDayOpen("2026-11-22"), false);
+    prefs.setChangelogDayOpen("2026-11-22", true);
+    prefs.setChangelogDayOpen("2026-11-23", true);
+    prefs.save("changelogs", { search: "morphe" });
+    const reload = createBrowsePreferences(() => saved);
+    assert.equal(reload.isChangelogDayOpen("2026-11-22"), true);
+    assert.equal(reload.isChangelogDayOpen("2026-11-23"), true);
+    reload.setChangelogDayOpen("2026-11-22", false);
+    const reopened = createBrowsePreferences(() => saved);
+    assert.equal(reopened.isChangelogDayOpen("2026-11-22"), false);
+    assert.equal(reopened.isChangelogDayOpen("2026-11-23"), true);
+});
+
+test("Calendar view is opt-in and persists separately from the bundle layout", () => {
+    const saved = storage(), prefs = createBrowsePreferences(() => saved);
+    assert.equal(prefs.changelogCalendar, false);
+    prefs.setChangelogCalendar(true);
+    prefs.save("bundles", { grid: false });
+    const reload = createBrowsePreferences(() => saved);
+    assert.equal(reload.changelogCalendar, true);
+    assert.equal(reload.read("bundles").grid, false);
+});
+
 test("Malformed or blocked storage preserves usable defaults and in-memory tab state", () => {
     for (const getStorage of [() => ({getItem: () => "{"}),
         () => { throw new Error("Blocked"); },
@@ -59,7 +84,7 @@ function node(id = "") {
 }
 async function frontend(prefs, suppliedSummaries) {
     const source = await readFile(new URL("../../web/app.js", import.meta.url), "utf8");
-    const tabs = [node("bundles-tab"),node("apps-tab")], fields = {};
+    const tabs = [node("bundles-tab"),node("apps-tab"),node("changelogs-tab")], fields = {};
     const url = "https://github.com/a/b";
     const summaries = suppliedSummaries || [
         {id:"new", version:"v2", source:{url}, bundle_type:"Morphe:V1", is_latest:true},
@@ -70,10 +95,11 @@ async function frontend(prefs, suppliedSummaries) {
     const context = {document:{querySelectorAll:()=>tabs,querySelector:()=>node(),
         getElementById:id=>fields[id]??=node(id)},results:node(),container:node(),viewToggle:node(),
         input:node(),packageFilter:node(),sourceFilter:node(),bundleVersionFilter:node(),bundleTypeFilter:node(),status:node(),
+        track:node(),releaseFeed:node(),calendarToggle:node(),versionPicker:{sync(){}},typePicker:{sync(){}},
         filterButtons:["all","latest","release","prerelease"].map(filter=>Object.assign(node(),{dataset:{filter}})),
         navigationReady:true,navigationRevision:0,navigation:{read:()=>null,write(){return true;}},
         detailsBrowser:{close(){},openApp(){},async openBundle(){}},
-        sourceSelection:0,sourcePicker:{sync(){}}, browsePreferences:prefs,currentTab:prefs.activeTab,
+        sourceSelection:0,sourcePicker:{sync(){}}, browsePreferences:prefs,currentTab:prefs.activeTab,currentSourceUrl:"",
         summaries,latestBundles:[transformBundle(summaries[0])],sourceVersions:[],allBundles:[],catalog:{},
         transformBundle,compareReleaseDates,matchesReleaseFilter,bundleTypeLabel:x=>x,
         Option: function(label,value) { this.label=label; this.value=value; },
@@ -112,6 +138,26 @@ test("Switching tabs restores controls and a selected historical release", async
     assert.equal(c.packageFilter.value,"19.16");
     assert.equal(c.currentFilter,"latest");
 });
+test("Changing the changelog source clears old rows before the new history resolves", async () => {
+    const prefs = createBrowsePreferences(() => storage());
+    prefs.activate("changelogs");
+    prefs.save("changelogs", { source: "https://github.com/a/b" });
+    const {context:c} = await frontend(prefs);
+    assert.equal(c.sourceVersions.length, 2);
+    let resolveHistory, clears = 0;
+    c.catalog.historyBundles = () => new Promise(resolve => { resolveHistory = resolve; });
+    c.releaseFeed.replaceChildren = () => { clears++; };
+    const next = "https://github.com/b/c";
+    const selection = c.selectSource(next);
+    assert.equal(clears, 1);
+    assert.equal(c.sourceVersions.length, 0);
+    assert.equal(c.bundleVersionFilter.disabled, true);
+    resolveHistory([{id:"other",version:"v1",source:{url:next},bundle_type:"Morphe:V1"}]);
+    await selection;
+    assert.equal(c.sourceVersions[0].id, "other");
+    assert.equal(c.bundleVersionFilter.disabled, false);
+});
+
 test("Removed sources, versions and bundle types do not restore hidden active filters", async () => {
     const prefs = createBrowsePreferences(() => storage());
     prefs.save("bundles", {source:"https://github.com/deleted/repo",version:"v0",type:"Removed",release:"all"});
@@ -164,7 +210,8 @@ test("A pending source history cannot clear a version restored by tab navigation
     prefs.save("bundles",{source:url,release:"all"});
     const {context:c,tabs}=await frontend(prefs);
     let resolve;
-    c.catalog={historyBundles:()=>new Promise(done=>{resolve=done;})};
+    const history = new Promise(done => { resolve = done; });
+    c.catalog={historyBundles:()=>history};
     const pending=c.selectSource(url);
     tabs[1].click();
     prefs.save("bundles",{source:url,version:"v1",release:"all"});
@@ -232,6 +279,106 @@ test("A shared historical bundle loads source history before opening the selecte
     assert.equal(opened[0].bundle.version,"v0");
     assert.equal(opened[0].options.section,"changelog");
     assert.equal(opened[0].options.notify,false);
+});
+
+test("A shared changelog opens without waiting for the archive or the linked source's history", async () => {
+    const {context:c} = await frontend(createBrowsePreferences(() => storage()));
+    const url = "https://github.com/a/b";
+    let finishFeed, recordOpened, historyReads = 0;
+    const feed = new Promise(resolve => { finishFeed = resolve; });
+    const opened = new Promise(resolve => { recordOpened = resolve; });
+    c.catalog = {
+        async historyBundles() { historyReads++; return []; },
+        async file(path) {
+            assert.equal(path, "bundles/historic.json");
+            return {id:"historic",version:"v0",source:{url},bundle_type:"Morphe:V1"};
+        }
+    };
+    c.renderFilteredBundles = () => feed;
+    c.detailsBrowser.openBundle = async bundle => recordOpened(bundle.id);
+    const pending = c.restoreNavigation({tab:"changelogs",browse:{},
+        detail:{kind:"bundle",id:"historic",source:url,version:"v0",section:"changelog"}});
+    const openedBeforeFeed = await Promise.race([opened, pending, new Promise(resolve => setImmediate(resolve))]);
+    finishFeed();
+    await pending;
+    assert.equal(openedBeforeFeed, "historic");
+    assert.equal(historyReads, 0);
+});
+
+test("Closing a linked changelog and searching preserve its pending source and version", async () => {
+    const {context:c} = await frontend(createBrowsePreferences(() => storage()));
+    const url = "https://github.com/a/b";
+    const row = {id:"historic",version:"v0",source:{url},bundle_type:"Morphe:V1"};
+    let finishHistory, recordOpened;
+    const history = new Promise(resolve => { finishHistory = resolve; });
+    const opened = new Promise(resolve => { recordOpened = resolve; });
+    c.catalog = { historyBundles: () => history, async file() { return row; } };
+    c.detailsBrowser.openBundle = async bundle => recordOpened(bundle.id);
+    const pending = c.restoreNavigation({tab:"changelogs",browse:{source:url,version:"v0"},
+        detail:{kind:"bundle",id:"historic",source:url,version:"v0",section:"changelog"}});
+    const openedFirst = await Promise.race([opened, new Promise(resolve => setImmediate(resolve))]);
+    c.writeNavigation({detail:null}, {userAction:true});
+    assert.equal(c.bundleVersionFilter.disabled, true);
+    c.input.value = "New search";
+    c.saveBrowsePreferences({userAction:true});
+    finishHistory([row]);
+    await pending;
+    assert.equal(openedFirst, "historic");
+    assert.equal(c.currentBundleVersion, "v0");
+    assert.equal(c.bundleVersionFilter.disabled, false);
+    assert.equal(c.currentSearchQuery, "new search");
+    assert(c.bundleVersionFilter.options.some(option => option.value === "v0"));
+});
+
+test("A legacy changelog link falls back to the same source and version on a missing ID", async () => {
+    const {context:c} = await frontend(createBrowsePreferences(() => storage()));
+    const url = "https://github.com/a/b", reads = [], opened = [];
+    c.catalog = {
+        async file(path) {
+            reads.push(path);
+            throw Object.assign(new Error("Bundle not found"), {status:404});
+        },
+        async historyBundles(source) {
+            reads.push(source);
+            return [{id:"replacement",version:"v0",source:{url},bundle_type:"Morphe:V1"}];
+        }
+    };
+    c.detailsBrowser.openBundle = async bundle => opened.push(bundle.id);
+    await c.restoreNavigation({tab:"changelogs",browse:{},
+        detail:{kind:"bundle",id:"retired",source:url,version:"v0",section:"changelog"}});
+    assert.deepEqual(reads, ["bundles/retired.json", url]);
+    assert.deepEqual(opened, ["replacement"]);
+});
+
+test("Failed changelog rollovers preserve only results matching the current filters", async () => {
+    const source = await readFile(new URL("../../web/app.js", import.meta.url), "utf8");
+    const start = source.indexOf("async function renderReleaseFeed(");
+    const end = source.indexOf("\nfunction renderReleaseEntry(", start);
+    const entry = {};
+    const children = [entry];
+    const c = {
+        catalog: {changelogBundles: async () => { throw new Error("History unavailable"); }},
+        currentTab: "changelogs", currentSourceUrl:"", currentBundleVersion:"",
+        currentBundleType:"", currentFilter:"all", currentSearchQuery:"",
+        searchSequence:1, displayedChangelogFilters: JSON.stringify(["","","","all",""]),
+        status:{textContent:""}, recoverGeneration:async () => false,
+        document:{createElement: () => node()},
+        releaseFeed:{
+            querySelector: selector => selector === ".release-day, .changelog-calendar" && children.includes(entry) ? entry : null,
+            replaceChildren: () => { children.length = 0; },
+            prepend: element => children.unshift(element),
+            append: element => children.push(element)
+        }
+    };
+    runInNewContext(source.slice(start,end),c);
+    await c.renderReleaseFeed(1);
+    assert.equal(children[1],entry);
+    assert.match(c.status.textContent,/Showing previous results/);
+    c.currentSearchQuery = "different source";
+    await c.renderReleaseFeed(1);
+    assert.equal(children.length,1);
+    assert.notEqual(children[0],entry);
+    assert.match(c.status.textContent,/Please try again/);
 });
 
 test("A slow shared-link request cannot reopen details after the user changes tabs", async () => {

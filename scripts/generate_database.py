@@ -934,6 +934,27 @@ def build_database(root=ROOT, *, restore=True):
         "bundles.json": summaries,
         "releases.json": observations,
     }
+    # Load changelog history without transferring release notes or patch compatibility.
+    changelog_fields = (
+        "id",
+        "source_id",
+        "version",
+        "bundle_type",
+        "created_at",
+        "is_prerelease",
+        "patch_list_available",
+        "metadata_status",
+    )
+    files["changelogs.json"] = {
+        "columns": changelog_fields,
+        "rows": [
+            [bundle.get(field) for field in changelog_fields]
+            for bundle in summaries
+            if sources[bundle["source_id"]]["enabled"]
+            and bundle.get("availability") != "unavailable"
+            and (bundle.get("description") or "").strip()
+        ],
+    }
     # GraphQL scans scalar bundle fields without downloading the growing
     # release descriptions or repeating object keys thousands of times.
     # Keep the full text separately for description filters and projections.
@@ -1254,6 +1275,7 @@ def build_database(root=ROOT, *, restore=True):
             if name.startswith(
                 (
                     "graphql-",
+                    "changelogs.json",
                     "search-v2/",
                     "search-short/",
                     "search-unicode-v2/",

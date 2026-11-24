@@ -149,6 +149,7 @@ def test_search_postings_exclude_disabled_source_history(tmp_path):
     path, bundles = snapshot(tmp_path, db.build_database(tmp_path))
     assert bundles and all(bundle["source_id"] for bundle in bundles)
     assert db.read_json(path / "patch-index.json")["pages"]
+    assert db.read_json(path / "changelogs.json")["rows"] == []
     assert "ads" not in db.read_json(path / "search-v2/1-4.json")
     assert not (path / "search-short/1-1.json").exists()
     assert not (path / "search-short/2-1-4.json").exists()
@@ -499,6 +500,12 @@ def test_bundle_index_retains_full_descriptions_for_api_comparisons(tmp_path):
     path, bundles = snapshot(tmp_path, db.build_database(tmp_path))
     assert bundles[0]["description"] == description
     assert db.read_json(path / bundles[0]["detail_file"])["description"] == description
+    changelogs = db.read_json(path / "changelogs.json")
+    assert "description" not in changelogs["columns"]
+    entries = [dict(zip(changelogs["columns"], row, strict=True)) for row in changelogs["rows"]]
+    assert [entry["id"] for entry in entries] == [bundles[0]["id"]]
+    assert entries[0]["version"] == "v1"
+    assert entries[0]["created_at"] == "2026-01-01T00:00:00"
 
 
 def test_unnamed_patches_and_empty_verified_bundles_survive_publication_and_restore(tmp_path):
@@ -980,7 +987,8 @@ def test_header_svg_dimensions_do_not_depend_on_cached_css():
 
     markup = Icons()
     markup.feed((db.ROOT / "web/index.html").read_text(encoding="utf-8"))
-    assert len(markup.icons) == 4
+    # Two theme icons, one GitHub icon, and the three browse filter chevrons.
+    assert sorted(icon["width"] for icon in markup.icons) == ["18"] * 3 + ["20"] * 3
     assert all(
         icon["width"] == icon["height"] and icon["width"] in {"18", "20"}
         for icon in markup.icons

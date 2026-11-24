@@ -7,6 +7,7 @@ import { fixture } from "./fixture.js";
 import { filterApps } from "../../shared/apps.js";
 import { latestReleaseIds, matchesReleaseFilter, countLabel, patchMatchesSearch, patchDisplayName } from "../../shared/site.js";
 import { renderPatchOptions } from "../../shared/detail-browser.js";
+import { formatPatchDescription } from "../../shared/details.js";
 import { Catalog } from "../../shared/catalog.js";
 
 const stable = "a".repeat(24), dev = "b".repeat(24);
@@ -157,12 +158,18 @@ test("Apps rendering includes historical matches and opens a details window", as
 test("Bundle patch package labels show names and packages without app images", async () => {
   const source = await readFile(new URL("../../web/app.js",import.meta.url),"utf8");
   const code = source.slice(source.indexOf("function renderPatch("),source.indexOf("\nfunction sourceName("));
-  const context = { escapeHtml: value => String(value ?? ""), renderPatchOptions, patchDisplayName };
+  const context = { escapeHtml: value => String(value ?? ""), renderPatchOptions, patchDisplayName, formatPatchDescription };
   runInNewContext(code, context);
   const html = context.renderPatch({name:"Hide ads",
-    compatiblePackages:[{name:"com.video",appName:"Video App",versions:["1.0"]}]});
+    description:"\n    Set up the patch.\n\n    - Open settings\n    - Save\n",
+    compatiblePackages:[{name:"com.video",appName:"Video App",versions:["1.0","2.0"]},
+      {name:"org.example.other",versions:[]}]});
+  assert.match(html,/<span class="patch-description">Set up the patch\.\n\n- Open settings\n- Save<\/span>/);
   assert.match(html,/Video App/);
-  assert.match(html,/com.video/);
+  assert.match(html,/<span class="package-id">com\.<wbr>video<\/span>/);
+  assert.match(html,/<span class="package-name">org\.<wbr>example\.<wbr>other<\/span>/);
+  assert.deepEqual([...html.matchAll(/role="listitem">([^<]+)/g)].map(version => version[1]), ["1.0","2.0"]);
+  assert.match(html,/<span class="package-version">All versions<\/span>/);
   assert.doesNotMatch(html,/<img/);
   const internal = context.renderPatch({name:"  ",display_name:"Enable Android Debugging Patch",hidden:true});
   assert.match(internal,/Enable Android Debugging Patch/);
@@ -178,16 +185,19 @@ test("Apps tab hides irrelevant controls and supports keyboard navigation", asyn
       addEventListener(event,fn){this.handlers[event]=fn;},
       click(){this.handlers.click();},focus(){this.focused=true;}};
   }
-  const tabs = [node("bundles-tab"),node("apps-tab")], fields = {};
+  const tabs = [node("bundles-tab"),node("apps-tab"),node("changelogs-tab")], fields = {};
   const context = {document:{querySelectorAll:()=>tabs,querySelector:()=>node("row"),
     getElementById:id=>fields[id]??=node(id)}, results:node("results"),
-    input:node("search"),
-    currentTab:"bundles", browsePreferences:{activate(){}}, saveBrowsePreferences(){}, restoreBrowsePreferences(){},
+    input:node("search"), viewToggle:node("view-toggle"), calendarToggle:node("calendar-toggle"), packageFilter:node("package-filter"),
+    track:node("v-track"), releaseFeed:{...node("release-feed"),replaceChildren(){}},
+    currentTab:"bundles", currentSourceUrl:"", catalog:null,
+    browsePreferences:{activate(){},read(){return {source:""};}}, saveBrowsePreferences(){}, restoreBrowsePreferences(){},
     detailsBrowser:{close(){}},writeNavigation(){},
     resetBundleSelection(){},clearVirtualizer(){},renderFilteredBundles(){}};
   runInNewContext(code,context);
   tabs[1].click();
   assert.equal(context.currentTab,"apps");
+  assert.equal(context.calendarToggle.hidden,true);
   assert.equal(fields["bundle-version-field"].hidden,true);
   assert.equal(context.input.attrs["aria-label"],"Search apps");
   assert.equal(tabs[1].attrs["aria-selected"],"true");
@@ -195,6 +205,12 @@ test("Apps tab hides irrelevant controls and supports keyboard navigation", asyn
   assert.equal(context.currentTab,"bundles");
   assert.equal(fields["bundle-version-field"].hidden,false);
   assert.equal(tabs[0].focused,true);
+  tabs[0].handlers.keydown({key:"ArrowLeft",preventDefault(){}});
+  assert.equal(context.currentTab,"changelogs");
+  assert.equal(context.packageFilter.hidden,true);
+  assert.equal(context.releaseFeed.hidden,false);
+  assert.equal(context.calendarToggle.hidden,false);
+  assert.equal(tabs[2].focused,true);
 });
 
 test("App routes exclude disabled sources and paginate large bundle app lists", async () => {

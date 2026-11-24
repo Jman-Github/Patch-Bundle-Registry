@@ -6,6 +6,24 @@ const base = "https://example.test/catalog/?utm_source=shared#top";
 const browse = { search: "Hide ads & branding", package: "com.video@1.0",
     source: "https://git.example/team/repo", version: "v1+test", type: "Morphe:V1",
     release: "all", grid: false };
+test("Changelogs default to all releases and share explicit channel filters", () => {
+    assert.equal(readSiteRoute(base.replace("utm_source=shared", "tab=changelogs")).browse.release, "all");
+    const latest = siteRouteUrl(base, { tab: "changelogs", browse: { release: "latest" } });
+    assert.equal(latest.searchParams.get("release"), "latest");
+    assert.equal(readSiteRoute(latest).browse.release, "latest");
+    assert.equal(siteRouteUrl(latest, { tab: "changelogs", browse: { release: "all" } }).searchParams.has("release"), false);
+});
+
+test("Comparison share links preserve changelog filters and the selected baseline", () => {
+    const route = {
+        tab:"changelogs", browse:{ search:"morphe", package:"", source:"https://github.com/a/b",
+            version:"v2", type:"Morphe:V1", release:"all", grid:true },
+        detail:{ kind:"bundle", id:"ab", source:"https://github.com/a/b", version:"v2", section:"compare", baseline:"a1" }
+    };
+    assert.deepEqual(readSiteRoute(siteRouteUrl("https://example.test/", route)), route);
+    assert.equal(readSiteRoute("https://example.test/?bundle=ab&section=compare&baseline=invalid").detail.baseline, undefined);
+});
+
 test("Share URLs round-trip bundle versions, details sections and all browse filters", () => {
     const route = { tab: "bundles", browse, detail: { kind: "bundle", id: "a".repeat(24),
         source: browse.source, version: "v1+test", section: "changelog" } };
