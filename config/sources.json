@@ -4344,5 +4344,10 @@
     "patches": "https://gitlab.com/rokuOP/personal-niagara-weather",
     "integrations": false,
     "disabled": false
+  },
+  "morphe-patches-13": {
+    "patches": "https://github.com/josselinonduty/morphe-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
