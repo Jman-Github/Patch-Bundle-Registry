@@ -4334,5 +4334,25 @@
     "patches": "https://github.com/josselinonduty/morphe-patches",
     "integrations": false,
     "disabled": false
+  },
+  "gboard-rambler-enhancements": {
+    "patches": "https://github.com/abotmaker/gboard-rambler-enhancements",
+    "integrations": false,
+    "disabled": false
+  },
+  "glyphchemy": {
+    "patches": "https://github.com/assc0d3r/GLYPHCHEMY",
+    "integrations": false,
+    "disabled": false
+  },
+  "byd-maps-patches": {
+    "patches": "https://github.com/kennyric/byd-maps-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-14": {
+    "patches": "https://github.com/mben25/morphe-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
