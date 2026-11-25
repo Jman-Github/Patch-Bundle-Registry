@@ -27,13 +27,20 @@ jobs:
         with:
           ref: bundles
           persist-credentials: false
+      # A token from the jman-registry-sources GitHub App, which has its own hourly API
+      # limit, so this job cannot use up the account's personal quota (or be blocked by it).
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        id: sources-token
+        with:
+          client-id: ${{ vars.SOURCES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SOURCES_APP_PRIVATE_KEY }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
       - run: python -m pip install 'httpx>=0.25,<1'
       - name: Discover and prune patch repositories
         env:
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ steps.sources-token.outputs.token }}
         run: python -m scripts.update_patch_sources
       - name: Import approved public sources
         id: import_sources
@@ -41,7 +48,7 @@ jobs:
           APPROVED_SOURCES_URL: ${{ vars.APPROVED_SOURCES_URL }}
           IMPORT_ACCESS_CLIENT_ID: ${{ secrets.IMPORT_ACCESS_CLIENT_ID }}
           IMPORT_ACCESS_CLIENT_SECRET: ${{ secrets.IMPORT_ACCESS_CLIENT_SECRET }}
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ steps.sources-token.outputs.token }}
         run: python -m scripts.import_approved_sources
       - name: Preview combined source changes
         if: inputs.dry_run == true
@@ -55,13 +62,13 @@ jobs:
       - name: Push the inventory to start the catalog refresh
         if: inputs.dry_run != true
         env:
-          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GH_TOKEN: ${{ steps.sources-token.outputs.token }}
         run: |
           if git diff --quiet -- config/sources.json; then
             exit 0
           fi
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::Set the registry's GIT_TOKEN secret to a GitHub token with write access to bundles."
+            echo "::error::The jman-registry-sources app token is missing. Check the SOURCES_APP_CLIENT_ID variable and SOURCES_APP_PRIVATE_KEY secret."
             exit 1
           fi
           git config user.name 'github-actions[bot]'
