@@ -4334,5 +4334,120 @@
     "patches": "https://github.com/josselinonduty/morphe-patches",
     "integrations": false,
     "disabled": false
+  },
+  "gboard-rambler-enhancements": {
+    "patches": "https://github.com/abotmaker/gboard-rambler-enhancements",
+    "integrations": false,
+    "disabled": false
+  },
+  "glyphchemy": {
+    "patches": "https://github.com/assc0d3r/GLYPHCHEMY",
+    "integrations": false,
+    "disabled": false
+  },
+  "byd-maps-patches": {
+    "patches": "https://github.com/kennyric/byd-maps-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-14": {
+    "patches": "https://github.com/mben25/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-patches": {
+    "patches": "https://github.com/pumzia/revanced-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-hitster-db-patch": {
+    "patches": "https://github.com/Snupai/revanced-hitster-db-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-patches-archive": {
+    "patches": "https://github.com/AmpleReVanced/revanced-patches-archive",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patch-siagatani": {
+    "patches": "https://github.com/EryrizalH/Morphe-patch-Siagatani",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-15": {
+    "patches": "https://github.com/valonsodev/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-patches-tristan": {
+    "patches": "https://github.com/tristan23612/revanced-patches-tristan",
+    "integrations": false,
+    "disabled": false
+  },
+  "ekqimodyt": {
+    "patches": "https://github.com/FluxusScripts/ekqimodyt",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-16": {
+    "patches": "https://github.com/pomee4/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sai-patches": {
+    "patches": "https://github.com/saiyupunch/sai-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-17": {
+    "patches": "https://github.com/Darkaxt/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "mygate-surprise-delivery-morphe-patches": {
+    "patches": "https://github.com/chaosmanage/mygate-surprise-delivery-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "revanced-vot-patches": {
+    "patches": "https://github.com/KoromeloDev/revanced-vot-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "eurowag-patches": {
+    "patches": "https://gitlab.com/georgewoodall82/eurowag-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-18": {
+    "patches": "https://github.com/2kshoka/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "mergenv1-patches": {
+    "patches": "https://github.com/d0r4nn/mergenv1-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "macrofactor-patches": {
+    "patches": "https://github.com/Parideboy/macrofactor-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "w3s-patches": {
+    "patches": "https://github.com/RyuuseiAkira/w3s-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "mobile-de-morphe-patches": {
+    "patches": "https://github.com/itnaegele/mobile-de-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sadmod-patches": {
+    "patches": "https://github.com/NotRin7/sadmod-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
