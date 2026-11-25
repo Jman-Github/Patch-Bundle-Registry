@@ -41,7 +41,11 @@ def approved_sources(client, url, headers):
                     raise ValueError("Approved feed page exceeded its size limit.")
                 body.extend(chunk)
         feed = json.loads(body, object_pairs_hook=unique_object)
-        if not isinstance(feed, dict) or feed.get("version") != 1 or not isinstance(feed.get("sources"), list):
+        if (
+            not isinstance(feed, dict)
+            or feed.get("version") != 1
+            or not isinstance(feed.get("sources"), list)
+        ):
             raise ValueError("Unexpected approved feed format.")
         if len(feed["sources"]) > 50:
             raise ValueError("Approved feed returned too many entries on one page.")
@@ -204,14 +208,18 @@ def required(name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dry-run", action="store_true", help="Validate the feed without writing the inventory.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate the feed without writing the inventory."
+    )
     args = parser.parse_args()
     try:
         headers = {
             "CF-Access-Client-Id": required("IMPORT_ACCESS_CLIENT_ID"),
             "CF-Access-Client-Secret": required("IMPORT_ACCESS_CLIENT_SECRET"),
         }
-        with httpx.Client(timeout=12, follow_redirects=False, headers={"User-Agent": "Patch-Bundle-Registry"}) as client:
+        with httpx.Client(
+            timeout=12, follow_redirects=False, headers={"User-Agent": "Patch-Bundle-Registry"}
+        ) as client:
             feed = approved_sources(client, required("APPROVED_SOURCES_URL"), headers)
             added, issues = add_approved_sources(
                 ROOT, client, feed, token=os.environ.get("GITHUB_TOKEN"), dry_run=args.dry_run,
@@ -225,9 +233,13 @@ def main():
     for issue in issues:
         action = "Deferred" if issue.deferred else "Skipped"
         print(f"{action} {issue.repository}: {issue.message}")
-    print(f"{'Would add' if args.dry_run else 'Added'} {len(added)} source(s): {', '.join(added) or 'none'}")
+    action = "Would add" if args.dry_run else "Added"
+    print(f"{action} {len(added)} source(s): {', '.join(added) or 'none'}")
     if issues:
-        print(f"{len(issues)} approval(s) could not be verified. They will be checked again on the next run.")
+        print(
+            f"{len(issues)} approval(s) could not be verified. "
+            "They will be checked again on the next run."
+        )
 
 
 if __name__ == "__main__":

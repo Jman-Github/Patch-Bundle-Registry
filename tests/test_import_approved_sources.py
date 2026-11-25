@@ -36,7 +36,10 @@ def respond_to_release(request):
 def inventory(tmp_path):
     path = tmp_path / "config/sources.json"
     path.parent.mkdir()
-    path.write_text('{"demo-stable":{"patches":"https://github.com/old/demo","latest":false}}\n', encoding="utf-8")
+    path.write_text(
+        '{"demo-stable":{"patches":"https://github.com/old/demo","latest":false}}\n',
+        encoding="utf-8",
+    )
     return path
 
 
@@ -66,7 +69,9 @@ def test_missing_asset_and_reused_repository_name_cannot_be_imported(tmp_path):
         return httpx.Response(200, json={"tag_name": "v2", "assets": []})
 
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
-        added, issues = add_approved_sources(tmp_path, client, [APPROVAL, {**APPROVAL, "projectId": 5}])
+        added, issues = add_approved_sources(
+            tmp_path, client, [APPROVAL, {**APPROVAL, "projectId": 5}]
+        )
     assert not added
     assert "no longer lists a qualifying" in issues[0].message
     assert "identity changed" in issues[1].message
@@ -79,7 +84,9 @@ def test_feed_auth_is_sent_to_each_page_and_wrong_version_fails():
         assert request.url.host == "scraper.example.com"
         assert request.headers["CF-Access-Client-Id"] == "test-id"
         if request.url.params.get("cursor") is None:
-            return httpx.Response(200, json={"version": 1, "sources": [APPROVAL], "next": "github:42"})
+            return httpx.Response(
+                200, json={"version": 1, "sources": [APPROVAL], "next": "github:42"}
+            )
         return httpx.Response(200, json={"version": 2, "sources": [], "next": None})
 
     with (
@@ -89,14 +96,16 @@ def test_feed_auth_is_sent_to_each_page_and_wrong_version_fails():
         approved_sources(client, FEED, {"CF-Access-Client-Id": "test-id"})
 
 
-def test_workflow_reports_deferred_verification_after_writing_reachable_sources(tmp_path, monkeypatch):
+def test_workflow_reports_deferred_verification_after_import(tmp_path, monkeypatch):
     path = inventory(tmp_path)
     output = tmp_path / "github-output"
     deferred = {**APPROVAL, "repository": "https://github.com/owner/limited"}
 
     def respond(request):
         if str(request.url) == FEED:
-            return httpx.Response(200, json={"version": 1, "sources": [deferred, APPROVAL], "next": None})
+            return httpx.Response(
+                200, json={"version": 1, "sources": [deferred, APPROVAL], "next": None}
+            )
         if request.url.path == "/repos/owner/limited":
             return httpx.Response(429)
         return respond_to_release(request)
