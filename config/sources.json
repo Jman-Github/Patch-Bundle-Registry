@@ -4439,5 +4439,15 @@
     "patches": "https://github.com/RyuuseiAkira/w3s-patches",
     "integrations": false,
     "disabled": false
+  },
+  "mobile-de-morphe-patches": {
+    "patches": "https://github.com/itnaegele/mobile-de-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sadmod-patches": {
+    "patches": "https://github.com/NotRin7/sadmod-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
