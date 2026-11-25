@@ -8,7 +8,7 @@ from test_app_catalog import NOW, index_v2, play, prepare
 from test_generate_database import write
 
 from scripts import refresh_app_metadata as metadata
-from scripts.apkmirror_metadata import lookup
+from scripts.apkmirror_metadata import ChallengePage, app_path, lookup
 
 PACKAGE = "com.laurencedawson.reddit_sync"
 LISTING = "/apk/red-apps-ltd/sync-for-reddit/"
@@ -71,6 +71,7 @@ def test_apkmirror_follows_app_results_and_verifies_listing_package():
         "app_name": "Sync & Friends",
         "icon_url": "https://www.apkmirror.com/icons/sync.png",
         "metadata_source": "apkmirror",
+        "apkmirror_path": LISTING,
     }
     assert seen == ["/", SIMILAR, LISTING]
 
@@ -108,7 +109,38 @@ def test_apkmirror_ignores_sidebar_matches_and_foreign_icons():
     assert lookup(PACKAGE, fetch)["icon_url"] is None
     assert lookup(PACKAGE, lambda _: search()) is None
     with pytest.raises(ValueError, match="Unrecognized APKMirror search page"):
-        lookup(PACKAGE, lambda _: "<title>Just a moment...</title>")
+        lookup(PACKAGE, lambda _: "<html><body>Maintenance</body></html>")
+    for page in ("<title>Just a moment...</title>", "Enable JavaScript and cookies to continue"):
+        with pytest.raises(ChallengePage):
+            lookup(PACKAGE, lambda _, page=page: page)
+
+
+def test_known_app_page_is_read_directly_and_falls_back_to_search():
+    seen = []
+
+    def direct(url):
+        seen.append(httpx.URL(url).path)
+        return listing(PACKAGE)
+
+    assert lookup(PACKAGE, direct, "red-apps-ltd/sync-for-reddit")["apkmirror_path"] == LISTING
+    assert seen == [LISTING]
+
+    seen.clear()
+
+    def moved(url):
+        path = httpx.URL(url).path
+        seen.append(path)
+        if path == SIMILAR:
+            return listing("com.other")
+        if path == "/":
+            return search(SIMILAR, LISTING)
+        return listing(PACKAGE)
+
+    # A stale page is not requested twice; search finds the current listing.
+    assert lookup(PACKAGE, moved, SIMILAR)["apkmirror_path"] == LISTING
+    assert seen == [SIMILAR, "/", LISTING]
+    assert app_path("../../etc") is None
+    assert app_path("/apk/a/b/extra/") is None
 
 
 def test_fallback_runs_after_play_misses_and_recovers_when_play_returns(tmp_path):
@@ -275,3 +307,53 @@ def test_apkmirror_skips_unconfirmed_play_misses(tmp_path, monkeypatch):
 
     state = run(tmp_path, unexpected, max_play=0)
     assert "apkmirror_checked_at" not in state["apps"][PACKAGE]
+
+
+def test_refresh_remembers_app_pages(tmp_path, monkeypatch):
+    prepare(tmp_path, [PACKAGE])
+    monkeypatch.setattr(metadata, "REPOSITORIES", ())
+    write(tmp_path / "database/app-metadata.json", {"apps": play_miss()})
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path == "/":
+            return httpx.Response(200, text=search(LISTING))
+        return httpx.Response(200, text=listing(PACKAGE))
+
+    state = run(tmp_path, handler, max_play=0, max_apkmirror=5)
+    assert calls == ["/", LISTING]
+    assert state["apps"][PACKAGE]["apkmirror_path"] == LISTING
+
+    calls.clear()
+    run(tmp_path, handler, now=NOW + timedelta(days=31), max_play=0, max_apkmirror=5)
+    # A remembered page skips the search on the next recheck.
+    assert calls == [LISTING]
+
+
+def test_challenge_page_backs_off_like_a_block(tmp_path, monkeypatch, capsys):
+    prepare(tmp_path, [PACKAGE])
+    monkeypatch.setattr(metadata, "REPOSITORIES", ())
+    write(tmp_path / "database/app-metadata.json", {"apps": play_miss()})
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(200, text="<p>Enable JavaScript and cookies to continue</p>")
+
+    state = run(tmp_path, handler, max_play=0)
+    assert calls == ["/"]
+    assert datetime.fromisoformat(state["apkmirror_retry_after"]) >= NOW + timedelta(minutes=59)
+    assert "APKMirror unavailable (browser challenge)" in capsys.readouterr().out
+    run(tmp_path, handler, now=NOW + timedelta(minutes=30), max_play=0)
+    assert calls == ["/"]
+
+
+def test_unreadable_known_page_is_retried_instead_of_cached_as_a_miss():
+    def fetch(url):
+        if httpx.URL(url).path == "/":
+            return search(LISTING)
+        return "<h1>Temporarily unavailable</h1>"
+
+    with pytest.raises(ValueError, match="Unrecognized APKMirror app page"):
+        lookup(PACKAGE, fetch, LISTING)

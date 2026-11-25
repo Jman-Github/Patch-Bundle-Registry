@@ -14,14 +14,14 @@ from urllib.parse import quote
 import httpx
 
 try:
-    from scripts.apkmirror_metadata import UnrecognizedSearchPage
+    from scripts.apkmirror_metadata import ChallengePage, UnrecognizedSearchPage
     from scripts.apkmirror_metadata import lookup as lookup_apkmirror
     from scripts.app_catalog import safe_icon
     from scripts.generate_database import ROOT, encoded, packages_for, read_json
     from scripts.git_hosts import normalize_source
     from scripts.source_policy import disabled_sources, source_channels
 except ModuleNotFoundError:
-    from apkmirror_metadata import UnrecognizedSearchPage
+    from apkmirror_metadata import ChallengePage, UnrecognizedSearchPage
     from apkmirror_metadata import lookup as lookup_apkmirror
     from app_catalog import safe_icon
     from generate_database import ROOT, encoded, packages_for, read_json
@@ -351,7 +351,7 @@ def enrich_apkmirror(
     for package in queued:
         cached = apps[package]
         try:
-            found = lookup_apkmirror(package, fetch_page)
+            found = lookup_apkmirror(package, fetch_page, cached.get("apkmirror_path"))
         except LookupBudget:
             break
         except (httpx.HTTPError, ValueError) as error:
@@ -361,15 +361,23 @@ def enrich_apkmirror(
                 error.response.status_code in {401, 403, 429, 503}
                 or "retry-after" in error.response.headers
             )
-            retry = (
-                provider_retry_after(error.response, received_at)
-                if blocked
-                else (received_at + timedelta(minutes=10)).isoformat()
-            )
+            if blocked:
+                retry = provider_retry_after(error.response, received_at)
+                reason = f"HTTP {error.response.status_code}"
+            elif isinstance(error, ChallengePage):
+                # A challenge served with 200 is still a refusal: wait like a 403.
+                retry = (received_at + timedelta(hours=1)).isoformat()
+                reason = "browser challenge"
+            else:
+                retry = (received_at + timedelta(minutes=10)).isoformat()
+                reason = type(error).__name__
             cached["apkmirror_retry_after"] = retry
             if blocked or isinstance(error, UnrecognizedSearchPage) or consecutive_failures >= 3:
                 state["apkmirror_retry_after"] = retry
-                print("Application metadata: APKMirror unavailable; retaining cached names.")
+                print(
+                    f"Application metadata: APKMirror unavailable ({reason}); "
+                    "retaining cached names."
+                )
                 break
             continue
         consecutive_failures = 0

@@ -2,6 +2,10 @@
 
 Inspired by Fresh Morphe's APKMirror fallback:
 https://github.com/drnx64/fresh-morphe/blob/1a9c2aabf7b1e8588da7d1f243773ee5572ee0c7/scripts/apkmirror_source.py
+
+Like apkmirror-downloader, apps are addressed by their ``/apk/<org>/<repo>/`` page
+when it is known, and Cloudflare challenge pages are reported rather than parsed:
+https://github.com/tanishqmanuja/apkmirror-downloader
 """
 
 import re
@@ -15,6 +19,32 @@ MAX_CANDIDATES = 4
 
 class UnrecognizedSearchPage(ValueError):
     """APKMirror did not return a usable search page."""
+
+
+class ChallengePage(UnrecognizedSearchPage):
+    """APKMirror answered with a browser challenge instead of content."""
+
+
+CHALLENGE_MARKERS = (
+    "Enable JavaScript and cookies to continue",
+    "<title>Just a moment...</title>",
+)
+
+
+def app_path(value):
+    """Return a normalized ``/apk/<org>/<repo>/`` path, or None when invalid."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value.startswith("/"):
+        value = "/apk/" + value.strip("/") + "/"
+    return value if APP_PATH.fullmatch(value) else None
+
+
+def checked(content):
+    if content is not None and any(marker in content for marker in CHALLENGE_MARKERS):
+        raise ChallengePage("APKMirror returned a browser challenge")
+    return content
 
 
 class SearchResults(HTMLParser):
@@ -113,30 +143,57 @@ def icon_url(raw):
     return None
 
 
-def lookup(package, fetch_page):
+def read_listing(package, path, fetch_page):
+    """Return metadata when the listing names exactly this package.
+
+    False means the listing exists but could not be read; None means no match.
+    """
+    content = checked(fetch_page(ORIGIN + path))
+    if content is None:  # An individual listing may have been removed.
+        return None
+    app = AppListing()
+    app.feed(content)
+    name = " ".join("".join(app.title).split())
+    if not name:
+        return False
+    if app.packages != {package}:
+        return None
+    return {
+        "app_name": name,
+        "icon_url": icon_url(app.icon),
+        "metadata_source": "apkmirror",
+        "apkmirror_path": path,
+    }
+
+
+def lookup(package, fetch_page, known_path=None):
+    """Find a package's APKMirror listing.
+
+    A known app page (remembered from an earlier match) is read
+    directly, which takes one request instead of a search plus listings. A known
+    page that no longer names the package falls back to search.
+    """
+    known_path = app_path(known_path)
+    # An unreadable candidate may be the right app, so retry instead of caching a miss.
+    unreadable_listing = False
+    if known_path:
+        found = read_listing(package, known_path, fetch_page)
+        if found:
+            return found
+        unreadable_listing = found is False
     query = urlencode({"post_type": "app_release", "searchtype": "app", "s": package})
     search = SearchResults()
-    search.feed(fetch_page(f"{ORIGIN}/?{query}") or "")
+    search.feed(checked(fetch_page(f"{ORIGIN}/?{query}")) or "")
     if not search.recognized:
         raise UnrecognizedSearchPage("Unrecognized APKMirror search page")
-    unreadable_listing = False
     for path in search.paths:
-        content = fetch_page(ORIGIN + path)
-        if content is None:  # An individual listing may have been removed.
+        if path == known_path:
             continue
-        app = AppListing()
-        app.feed(content)
-        name = " ".join("".join(app.title).split())
-        if not name:
+        found = read_listing(package, path, fetch_page)
+        if found is False:
             unreadable_listing = True
-            continue
-        if app.packages == {package}:
-            return {
-                "app_name": name,
-                "icon_url": icon_url(app.icon),
-                "metadata_source": "apkmirror",
-            }
+        elif found:
+            return found
     if unreadable_listing:
-        # An unreadable candidate may be the right app, so retry instead of caching a miss.
         raise ValueError("Unrecognized APKMirror app page")
     return None
