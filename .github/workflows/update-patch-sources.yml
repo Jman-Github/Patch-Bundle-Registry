@@ -1,10 +1,17 @@
 name: Update patch sources
 
 on:
+  schedule:
+    - cron: '17,47 * * * *'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Verify approvals and show additions without committing
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: update-patch-sources
@@ -12,34 +19,52 @@ concurrency:
 
 jobs:
   update:
+    if: github.event_name == 'workflow_dispatch' || vars.APPROVED_IMPORT_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: bundles
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d06889d02405 # v6
         with:
           python-version: '3.12'
       - run: python -m pip install 'httpx>=0.25,<1'
-      - name: Discover and check patch repositories
-        id: sources
+      - name: Import approved public sources
+        id: import_sources
         env:
+          APPROVED_SOURCES_URL: ${{ vars.APPROVED_SOURCES_URL }}
+          IMPORT_ACCESS_CLIENT_ID: ${{ secrets.IMPORT_ACCESS_CLIENT_ID }}
+          IMPORT_ACCESS_CLIENT_SECRET: ${{ secrets.IMPORT_ACCESS_CLIENT_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python -m scripts.update_patch_sources
-      - name: Commit source changes
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            python -m scripts.import_approved_sources --dry-run
+          else
+            python -m scripts.import_approved_sources
+          fi
+      - name: Push the inventory to start the catalog refresh
         env:
-          PRUNED: ${{ steps.sources.outputs.pruned }}
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           if git diff --quiet -- config/sources.json; then
             exit 0
           fi
-          message='chore: update patch sources'
-          if [ "$PRUNED" = true ]; then
-            message='chore: update patch sources (pruned dead repos)'
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Set the registry's GIT_TOKEN secret to a GitHub token with write access to bundles."
+            exit 1
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- config/sources.json
-          git commit -m "$message"
+          git commit -m 'chore: import approved patch sources'
+          # The same credential used by catalog publication also delivers the push event.
+          gh auth setup-git --hostname github.com --force
           git push origin HEAD:refs/heads/bundles
+      - name: Report incomplete verification
+        if: steps.import_sources.outputs.verification_deferred == 'true'
+        run: |
+          echo "::error::The forge API did not verify one or more approvals. Check the import log for details."
+          exit 1
