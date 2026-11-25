@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Verify approvals and show additions without committing
+        description: Preview discovery, pruning, and approved imports without pushing
         type: boolean
         default: false
 
@@ -21,31 +21,39 @@ jobs:
   update:
     if: github.event_name == 'workflow_dispatch' || vars.APPROVED_IMPORT_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: bundles
           persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d06889d02405 # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
       - run: python -m pip install 'httpx>=0.25,<1'
+      - name: Discover and prune patch repositories
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
+        run: python -m scripts.update_patch_sources
       - name: Import approved public sources
         id: import_sources
         env:
           APPROVED_SOURCES_URL: ${{ vars.APPROVED_SOURCES_URL }}
           IMPORT_ACCESS_CLIENT_ID: ${{ secrets.IMPORT_ACCESS_CLIENT_ID }}
           IMPORT_ACCESS_CLIENT_SECRET: ${{ secrets.IMPORT_ACCESS_CLIENT_SECRET }}
-          GITHUB_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ inputs.dry_run || false }}
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN || github.token }}
+        run: python -m scripts.import_approved_sources
+      - name: Preview combined source changes
+        if: inputs.dry_run == true
+        # Both scripts update the runner checkout so the diff includes their combined effects.
         run: |
-          if [ "$DRY_RUN" = true ]; then
-            python -m scripts.import_approved_sources --dry-run
+          if git diff --quiet -- config/sources.json; then
+            echo "No changes to config/sources.json."
           else
-            python -m scripts.import_approved_sources
+            git --no-pager diff -- config/sources.json
           fi
       - name: Push the inventory to start the catalog refresh
+        if: inputs.dry_run != true
         env:
           GH_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
@@ -59,7 +67,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- config/sources.json
-          git commit -m 'chore: import approved patch sources'
+          git commit -m 'chore: update patch sources'
           # The same credential used by catalog publication also delivers the push event.
           gh auth setup-git --hostname github.com --force
           git push origin HEAD:refs/heads/bundles
