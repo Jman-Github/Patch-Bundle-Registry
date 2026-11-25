@@ -4419,5 +4419,25 @@
     "patches": "https://gitlab.com/georgewoodall82/eurowag-patches",
     "integrations": false,
     "disabled": false
+  },
+  "morphe-patches-18": {
+    "patches": "https://github.com/2kshoka/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "mergenv1-patches": {
+    "patches": "https://github.com/d0r4nn/mergenv1-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "macrofactor-patches": {
+    "patches": "https://github.com/Parideboy/macrofactor-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "w3s-patches": {
+    "patches": "https://github.com/RyuuseiAkira/w3s-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
