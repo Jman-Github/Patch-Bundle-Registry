@@ -4629,5 +4629,10 @@
     "patches": "https://github.com/havaem/Gboard-patches",
     "integrations": false,
     "disabled": false
+  },
+  "awt-morphe": {
+    "patches": "https://github.com/AWTMODS/AWT-Morphe",
+    "integrations": false,
+    "disabled": false
   }
 }
