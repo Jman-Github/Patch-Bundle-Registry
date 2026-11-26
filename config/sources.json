@@ -4449,5 +4449,185 @@
     "patches": "https://github.com/NotRin7/sadmod-patches",
     "integrations": false,
     "disabled": false
+  },
+  "morphe-patches-19": {
+    "patches": "https://github.com/oscski/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "nai64patches": {
+    "patches": "https://github.com/Nai64/Nai64Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-template": {
+    "patches": "https://github.com/RoundSalmon4/morphe-patches-template",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-20": {
+    "patches": "https://github.com/heinrich26/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "aftersync": {
+    "patches": "https://github.com/ram-prices/AfterSync",
+    "integrations": false,
+    "disabled": false
+  },
+  "nai64extrapatches": {
+    "patches": "https://github.com/Nai64/Nai64ExtraPatches",
+    "integrations": false,
+    "disabled": false
+  },
+  "onlynazril-patches": {
+    "patches": "https://github.com/na-x-ril/onlynazril-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "waze-custom-patches": {
+    "patches": "https://github.com/aaayd/waze-custom-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "dcinside-personal-patches": {
+    "patches": "https://github.com/Lumi-01/dcinside-personal-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "levi-patches": {
+    "patches": "https://github.com/Christianzz4603/Levi-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "jimaku-patches": {
+    "patches": "https://github.com/1-Felix/jimaku-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "shatteredpixel-morphe-patches": {
+    "patches": "https://github.com/erobertsme/shatteredpixel-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-21": {
+    "patches": "https://github.com/yuuki-kagura/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gintype": {
+    "patches": "https://github.com/srwi/gintype",
+    "integrations": false,
+    "disabled": false
+  },
+  "rlx-patches": {
+    "patches": "https://github.com/Ramik4/rlx-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "kingdomrush-android-fps-patch-reseam": {
+    "patches": "https://github.com/SuperSamus/kingdomrush-android-fps-patch-reseam",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-youtube-patches": {
+    "patches": "https://github.com/stivencop-lab/Morphe-YouTube-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "carservice-patches": {
+    "patches": "https://github.com/kangrio/CarService-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sofascore": {
+    "patches": "https://github.com/DutchPharaoh/SofaScore",
+    "integrations": false,
+    "disabled": false
+  },
+  "x-filter": {
+    "patches": "https://github.com/ErnestTrung/x-filter",
+    "integrations": false,
+    "disabled": false
+  },
+  "amazon-amoled-patches": {
+    "patches": "https://github.com/Axandel/amazon-amoled-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "uakino-morphe-patches": {
+    "patches": "https://github.com/rareMaxim/uakino-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "redsave": {
+    "patches": "https://github.com/beepboopmachine/redsave",
+    "integrations": false,
+    "disabled": false
+  },
+  "birdy-patches": {
+    "patches": "https://github.com/SEIFELDEEN15/Birdy-Patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "m3-redesign": {
+    "patches": "https://github.com/iAmGodKiller/M3-Redesign",
+    "integrations": false,
+    "disabled": false
+  },
+  "sportsnet-patches": {
+    "patches": "https://github.com/sftsang/sportsnet-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphed": {
+    "patches": "https://github.com/gogamid/morphed",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-smtgpm": {
+    "patches": "https://github.com/smtgpm/morphe-patches-smtgpm",
+    "integrations": false,
+    "disabled": false
+  },
+  "pnamng-jagat-patchs": {
+    "patches": "https://github.com/pnam-ng/pnamng-jagat-patchs",
+    "integrations": false,
+    "disabled": false
+  },
+  "brave-patches": {
+    "patches": "https://github.com/beepboopmachine/brave-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "sbrowserx": {
+    "patches": "https://github.com/vortexnode/SBrowserX",
+    "integrations": false,
+    "disabled": false
+  },
+  "berrymix-patches": {
+    "patches": "https://github.com/BerryMix/berrymix-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "pixel10pro-camera-patches": {
+    "patches": "https://github.com/matteomorganti/pixel10pro-camera-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-22": {
+    "patches": "https://github.com/heltonricardo/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "notes-dark": {
+    "patches": "https://github.com/traychewy/Notes-dark-",
+    "integrations": false,
+    "disabled": false
+  },
+  "patches": {
+    "patches": "https://gitlab.com/yologurt/patches",
+    "integrations": false,
+    "disabled": false
   }
 }
