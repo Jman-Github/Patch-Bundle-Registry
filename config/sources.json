@@ -4639,5 +4639,10 @@
     "patches": "https://github.com/BIRDY141/Birdy-Patches",
     "integrations": false,
     "disabled": false
+  },
+  "instagram-patches-2": {
+    "patches": "https://github.com/brandonp2412/instagram-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
