@@ -2830,11 +2830,6 @@
     "integrations": false,
     "disabled": false
   },
-  "gospel-library-patches": {
-    "patches": "https://github.com/rubenaaroncalahorra/gospel-library-patches",
-    "integrations": false,
-    "disabled": false
-  },
   "kyt-patches": {
     "patches": "https://github.com/FinzoYFunzo/kyt-patches",
     "integrations": false,
