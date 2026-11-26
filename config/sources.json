@@ -4629,5 +4629,10 @@
     "patches": "https://gitlab.com/yologurt/patches",
     "integrations": false,
     "disabled": false
+  },
+  "gboard-patches-2": {
+    "patches": "https://github.com/havaem/Gboard-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
