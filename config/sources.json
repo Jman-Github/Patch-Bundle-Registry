@@ -4634,5 +4634,10 @@
     "patches": "https://github.com/AWTMODS/AWT-Morphe",
     "integrations": false,
     "disabled": false
+  },
+  "birdy-patches-2": {
+    "patches": "https://github.com/BIRDY141/Birdy-Patches",
+    "integrations": false,
+    "disabled": false
   }
 }
