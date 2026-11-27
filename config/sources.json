@@ -4644,5 +4644,75 @@
     "patches": "https://github.com/brandonp2412/instagram-patches",
     "integrations": false,
     "disabled": false
+  },
+  "rambler-bangla": {
+    "patches": "https://github.com/muhib-karim/Rambler-Bangla",
+    "integrations": false,
+    "disabled": false
+  },
+  "sabp-eppy-feng": {
+    "patches": "https://github.com/USFHunTer/sabp-eppy-feng",
+    "integrations": false,
+    "disabled": false
+  },
+  "whatsapp": {
+    "patches": "https://github.com/mridwanfirdaus2603/whatsapp",
+    "integrations": false,
+    "disabled": false
+  },
+  "gboard-morphe-patch": {
+    "patches": "https://github.com/zipzopzippy/gboard-morphe-patch",
+    "integrations": false,
+    "disabled": false
+  },
+  "instagram-follow-recommendations": {
+    "patches": "https://github.com/brandonp2412/instagram-follow-recommendations",
+    "integrations": false,
+    "disabled": false
+  },
+  "watchtime-tracker-patches": {
+    "patches": "https://github.com/xD33m/watchtime-tracker-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "ytmusic-selfhost-scrobble": {
+    "patches": "https://github.com/big1mosha/ytmusic-selfhost-scrobble",
+    "integrations": false,
+    "disabled": false
+  },
+  "morphe-patches-23": {
+    "patches": "https://github.com/ShindouAris/morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "gearhead-patches": {
+    "patches": "https://github.com/ccloud-admin/gearhead-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "syncit": {
+    "patches": "https://github.com/OgunHva/SyncIt",
+    "integrations": false,
+    "disabled": false
+  },
+  "mxplayer": {
+    "patches": "https://github.com/VitaTaf/mxplayer",
+    "integrations": false,
+    "disabled": false
+  },
+  "anhpan-patches": {
+    "patches": "https://github.com/rustybrozen/anhpan-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "japatch": {
+    "patches": "https://github.com/JAPofc/japatch",
+    "integrations": false,
+    "disabled": false
+  },
+  "gemini-microg-patches": {
+    "patches": "https://gitlab.com/ryuya0124/gemini-microg-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
