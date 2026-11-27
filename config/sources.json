@@ -3980,11 +3980,6 @@
     "integrations": false,
     "disabled": false
   },
-  "vbook-patche": {
-    "patches": "https://github.com/HaoDH/vbook-patche",
-    "integrations": false,
-    "disabled": false
-  },
   "chmate-ua-spoof-patches": {
     "patches": "https://github.com/rikunode/chmate-ua-spoof-patches",
     "integrations": false,
