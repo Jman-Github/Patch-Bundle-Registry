@@ -2535,11 +2535,6 @@
     "integrations": false,
     "disabled": false
   },
-  "gboard-offline-morphe": {
-    "patches": "https://github.com/Kirkland-Pickles/Gboard-offline-morphe",
-    "integrations": false,
-    "disabled": false
-  },
   "tracket-patches": {
     "patches": "https://github.com/contactjayclatty/tracket-patches",
     "integrations": false,
