@@ -4709,5 +4709,20 @@
     "patches": "https://gitlab.com/ryuya0124/gemini-microg-patches",
     "integrations": false,
     "disabled": false
+  },
+  "lopikss-patches-2": {
+    "patches": "https://github.com/REP-Julian/lopikss-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "violatv-morphe-patches": {
+    "patches": "https://github.com/sabopura/violatv-morphe-patches",
+    "integrations": false,
+    "disabled": false
+  },
+  "yt-kids-morphe-patches": {
+    "patches": "https://github.com/titaniumgui/yt-kids-morphe-patches",
+    "integrations": false,
+    "disabled": false
   }
 }
